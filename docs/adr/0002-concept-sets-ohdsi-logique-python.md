@@ -1,0 +1,7 @@
+# Jeux de concepts OHDSI + logique en Python plutôt que définitions de cohorte ATLAS
+
+Le format standard OHDSI serait une définition de cohorte ATLAS (Circe JSON). Mais le calcul des Niveaux de certitude à partir d'items ACR/EULAR éventuellement non documentés, et la lecture de NOTE_NLP (Anatomopathologie extraite du texte), s'y expriment mal ou pas du tout. On publie donc les jeux de concepts au format OHDSI, réutilisables dans ATLAS, et on écrit la logique de la Définition computable en Python sur DuckDB, qui lit directement les fichiers Parquet : les mêmes requêtes tournent sur le jeu synthétique et sur l'EDS, dont les tables OMOP sont exposées en Parquet. ClickHouse, moteur de requête de l'EDS, n'est pas utilisé par le pipeline : ses colonnes non-Nullable et son `join_use_nulls = 0` remplacent les valeurs absentes par 0 ou par une chaîne vide, ce qui confondrait « non documenté » et « négatif » — un Schirmer absent deviendrait un Schirmer à 0 mm, donc positif.
+
+## Consequences
+
+Un autre site OMOP ne peut pas importer le phénotype dans ATLAS tel quel : il doit exécuter le package, et adapter le SQL s'il n'a ni Parquet ni DuckDB. La compatibilité OMOP est garantie par construction (concepts standard uniquement, codes locaux reliés à LOINC dans l'EDS), pas par un test multi-site.
