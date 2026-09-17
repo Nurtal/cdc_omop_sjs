@@ -1,0 +1,47 @@
+"""La chaîne complète, telle que `make all` la déroule."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from sjs_phenotype.cli import main
+
+
+def test_generer_puis_phenotyper_puis_evaluer(tmp_path: Path) -> None:
+    travail = tmp_path / "travail"
+
+    assert main(["generer", "--sortie", str(travail), "--patients", "150", "--graine", "5"]) == 0
+    assert main(["phenotyper", "--travail", str(travail)]) == 0
+    assert main(["evaluer", "--travail", str(travail)]) == 0
+
+    assert (travail / "omop" / "person.parquet").exists()
+    assert (travail / "etat_reel.parquet").exists()
+    assert (travail / "resultats" / "phenotype.parquet").exists()
+
+    effectifs = json.loads((travail / "resultats" / "effectifs.json").read_text())
+    assert effectifs["total"] == 150
+    assert effectifs["par_niveau"]["défini"] == 0
+
+
+def test_evaluer_avant_de_phenotyper_rend_une_erreur_lisible(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "10"])
+
+    code = main(["evaluer", "--travail", str(travail)])
+
+    assert code != 0
+    assert "phenotyper" in capsys.readouterr().err
+
+
+def test_letat_reel_est_ecrit_hors_du_schema_omop(tmp_path: Path) -> None:
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "20"])
+
+    tables_omop = {chemin.name for chemin in (travail / "omop").glob("*.parquet")}
+
+    assert "etat_reel.parquet" not in tables_omop
