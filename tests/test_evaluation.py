@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sjs_phenotype.evaluation import evaluer
+from sjs_phenotype.evaluation import PROFIL_INCONNU, evaluer
 from sjs_phenotype.modele import Item, LignePhenotype, Niveau, Statut
 
 
@@ -60,8 +60,37 @@ def test_effectifs_par_statut_ditem() -> None:
     assert effectifs.par_statut[Item.SCHIRMER][Statut.NON_DOCUMENTE] == 3
 
 
+def test_les_effectifs_par_profil_viennent_de_letat_reel() -> None:
+    table = [
+        _ligne(1, Statut.POSITIF, Niveau.PROBABLE),
+        _ligne(2, Statut.NEGATIF, Niveau.AUCUN),
+        _ligne(3, Statut.NON_DOCUMENTE, Niveau.AUCUN),
+    ]
+    profils = {1: "sjd_seropositive_biopsie", 2: "sjd_seronegative", 3: "population_generale"}
+
+    effectifs = evaluer(table, profils=profils)
+
+    assert effectifs.par_profil["sjd_seropositive_biopsie"] == 1
+    assert effectifs.par_profil["population_generale"] == 1
+
+
+def test_sans_etat_reel_il_ny_a_pas_deffectifs_par_profil() -> None:
+    effectifs = evaluer([_ligne(1, Statut.POSITIF, Niveau.PROBABLE)])
+
+    assert effectifs.par_profil == {}
+
+
 def test_une_table_vide_ne_fait_pas_tomber_levaluation() -> None:
     effectifs = evaluer([])
 
     assert effectifs.total == 0
     assert effectifs.par_niveau[Niveau.PROBABLE] == 0
+
+
+def test_un_patient_absent_de_letat_reel_est_compte_a_part() -> None:
+    table = [_ligne(1, Statut.POSITIF, Niveau.PROBABLE), _ligne(2, Statut.NEGATIF, Niveau.AUCUN)]
+
+    effectifs = evaluer(table, profils={1: "sjd_seronegative"})
+
+    assert effectifs.par_profil["sjd_seronegative"] == 1
+    assert effectifs.par_profil[PROFIL_INCONNU] == 1

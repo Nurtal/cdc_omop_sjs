@@ -24,6 +24,19 @@ def test_generer_puis_phenotyper_puis_evaluer(tmp_path: Path) -> None:
     effectifs = json.loads((travail / "resultats" / "effectifs.json").read_text())
     assert effectifs["total"] == 150
     assert effectifs["par_niveau"]["défini"] == 0
+    assert sum(effectifs["par_profil"].values()) == 150
+
+
+def test_generer_depuis_un_fichier_de_scenario(tmp_path: Path) -> None:
+    travail = tmp_path / "travail"
+    fichier = tmp_path / "essai.toml"
+    fichier.write_text(
+        'nom = "essai"\nn_patients = 30\n[parts]\npopulation_generale = 1.0\n', encoding="utf-8"
+    )
+
+    assert main(["generer", "--sortie", str(travail), "--scenario", str(fichier)]) == 0
+
+    assert "essai" in (travail / "scenario.toml").read_text(encoding="utf-8")
 
 
 def test_evaluer_avant_de_phenotyper_rend_une_erreur_lisible(

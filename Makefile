@@ -1,4 +1,5 @@
 TRAVAIL ?= travail
+SCENARIO ?= scenarios/defaut.toml
 PATIENTS ?= 500
 GRAINE ?= 0
 
@@ -7,7 +8,7 @@ GRAINE ?= 0
 all: generate phenotype evaluate
 
 generate:
-	uv run sjs-phenotype generer --sortie $(TRAVAIL) --patients $(PATIENTS) --graine $(GRAINE)
+	uv run sjs-phenotype generer --sortie $(TRAVAIL) --scenario $(SCENARIO) --patients $(PATIENTS) --graine $(GRAINE)
 
 phenotype:
 	uv run sjs-phenotype phenotyper --travail $(TRAVAIL)

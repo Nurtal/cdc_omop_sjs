@@ -1,0 +1,84 @@
+{
+  "nom": "diagnostics",
+  "commentaire": "Codes CIM-10 mobilisés par le projet : SjD (Comparateur CIM-10), connectivites associées, lymphomes, Critères d'exclusion, sécheresse non spécifique. Le code de SjD n'entre jamais dans la Définition computable.",
+  "instantane_vocabulaire": {
+    "source": "provisoire",
+    "date": null,
+    "empreinte": null,
+    "a_verifier": true,
+    "note": "Identifiants locaux (>= 2 000 000 000) en attendant la vérification Athena."
+  },
+  "codes": {
+    "M35.0": {
+      "concept_id": 2000001000,
+      "libelle": "Syndrome sec [Gougerot-Sjögren]"
+    },
+    "M32": {
+      "concept_id": 2000001010,
+      "libelle": "Lupus érythémateux disséminé"
+    },
+    "M33": {
+      "concept_id": 2000001011,
+      "libelle": "Dermatopolymyosite"
+    },
+    "M34": {
+      "concept_id": 2000001012,
+      "libelle": "Sclérose systémique"
+    },
+    "M05": {
+      "concept_id": 2000001013,
+      "libelle": "Polyarthrite rhumatoïde séropositive"
+    },
+    "C88.4": {
+      "concept_id": 2000001020,
+      "libelle": "Lymphome à cellules B de la zone marginale extraganglionnaire (MALT)"
+    },
+    "D86": {
+      "concept_id": 2000001030,
+      "libelle": "Sarcoïdose"
+    },
+    "E85": {
+      "concept_id": 2000001031,
+      "libelle": "Amylose"
+    },
+    "B20": {
+      "concept_id": 2000001032,
+      "libelle": "Maladie à VIH"
+    },
+    "T86.0": {
+      "concept_id": 2000001033,
+      "libelle": "Réaction du greffon contre l'hôte"
+    },
+    "B18.2": {
+      "concept_id": 2000001034,
+      "libelle": "Hépatite virale chronique C"
+    },
+    "R68.2": {
+      "concept_id": 2000001040,
+      "libelle": "Sécheresse de la bouche"
+    },
+    "H04.1": {
+      "concept_id": 2000001041,
+      "libelle": "Autres affections de la glande lacrymale"
+    }
+  },
+  "groupes": {
+    "criteres_exclusion": [
+      "D86",
+      "E85",
+      "B20",
+      "T86.0",
+      "B18.2"
+    ],
+    "connectivites": [
+      "M32",
+      "M33",
+      "M34",
+      "M05"
+    ],
+    "lupus_ou_myosite": [
+      "M32",
+      "M33"
+    ]
+  }
+}
