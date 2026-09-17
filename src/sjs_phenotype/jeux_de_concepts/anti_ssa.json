@@ -1,0 +1,16 @@
+{
+  "nom": "anti_ssa",
+  "commentaire": "Jeu de concepts de l'Item Anti-SSA. Un anti-Ro52 isolé n'est pas un Anti-SSA : ses concepts sont listés pour être reconnus, jamais comptés comme preuve.",
+  "instantane_vocabulaire": {
+    "source": "provisoire",
+    "date": null,
+    "empreinte": null,
+    "a_verifier": true,
+    "note": "Identifiants locaux (>= 2 000 000 000) en attendant la vérification Athena — voir le ticket « Manifeste et instantané de vocabulaire »."
+  },
+  "anti_ro60": [2000000001],
+  "anti_ro52": [2000000002],
+  "anti_ssa_non_differencie": [2000000003],
+  "valeur_positive": 2000000010,
+  "valeur_negative": 2000000011
+}
