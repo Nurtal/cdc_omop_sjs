@@ -9,7 +9,7 @@ from typing import Any
 from aide_omop import ecrire_jeu
 from sjs_phenotype import omop
 from sjs_phenotype.concepts import JeuDeConcepts
-from sjs_phenotype.generator import Scenario, generer
+from sjs_phenotype.generator import Observation, Profil, Scenario, generer
 from sjs_phenotype.modele import Item, Niveau, Statut
 from sjs_phenotype.phenotype import run_phenotype
 
@@ -38,6 +38,7 @@ def _resultat(
         "value_as_concept_id": valeur_concept_id,
         "range_high": seuil_haut,
         "measurement_source_value": "SSA",
+        "visit_occurrence_id": None,
     }
 
 
@@ -152,16 +153,14 @@ def test_personne_natteint_defini_sans_extraction(tmp_path: Path) -> None:
     assert all(ligne.niveau is not Niveau.DEFINI for ligne in table)
 
 
-def test_les_patients_sjd_depistes_atteignent_probable(tmp_path: Path) -> None:
-    """Scénario sans hasard de recueil : tous les SjD sont dosés et séropositifs."""
+def test_les_patients_seropositifs_doses_atteignent_probable(tmp_path: Path) -> None:
+    """Scénario sans hasard de recueil : tout séropositif est dosé, aucun témoin ne l'est."""
     scenario = Scenario(
+        nom="sans hasard de recueil",
         n_patients=200,
-        part_sjd=0.4,
         graine=1,
-        proba_dosage_si_sjd=1.0,
-        proba_dosage_si_temoin=0.0,
-        proba_positif_si_sjd=1.0,
-        proba_positif_si_temoin=0.0,
+        parts={Profil.SJD_SEROPOSITIVE_SANS_BIOPSIE: 0.4, Profil.POPULATION_GENERALE: 0.6},
+        observation=Observation(proba_dosage_si_sjd=1.0, proba_dosage_si_temoin=0.0),
     )
     chemins = generer(scenario, tmp_path)
 
@@ -169,8 +168,8 @@ def test_les_patients_sjd_depistes_atteignent_probable(tmp_path: Path) -> None:
     probables = {ligne.person_id for ligne in table if ligne.niveau is Niveau.PROBABLE}
 
     etat_reel = omop.lire(chemins.etat_reel)
-    sjd = {int(ligne["person_id"]) for ligne in etat_reel if bool(ligne["sjd"])}
-    assert probables == sjd
+    seropositifs = {int(ligne["person_id"]) for ligne in etat_reel if bool(ligne["anti_ssa_reel"])}
+    assert probables == seropositifs
 
 
 def test_meme_graine_meme_resultat(tmp_path: Path) -> None:
@@ -185,3 +184,36 @@ def test_graines_differentes_jeux_differents(tmp_path: Path) -> None:
     second = generer(Scenario(n_patients=120, graine=4), tmp_path / "b")
 
     assert run_phenotype(premier.omop) != run_phenotype(second.omop)
+
+
+def _lupus_ro52_isole(proba_rendu_non_differencie: float) -> Scenario:
+    return Scenario(
+        nom="lupus à Ro52 isolé",
+        n_patients=100,
+        graine=2,
+        parts={Profil.LUPUS_ANTI_SSA: 1.0},
+        part_ro52_isole_si_lupus=1.0,
+        observation=Observation(
+            proba_dosage_si_temoin=1.0,
+            proba_rendu_non_differencie=proba_rendu_non_differencie,
+        ),
+    )
+
+
+def test_un_ro52_isole_rendu_comme_tel_natteint_jamais_probable(tmp_path: Path) -> None:
+    """Quand le laboratoire distingue Ro52 et Ro60, un Ro52 isolé n'est pas un Anti-SSA."""
+    chemins = generer(_lupus_ro52_isole(0.0), tmp_path)
+
+    table = run_phenotype(chemins.omop)
+
+    assert len(table) == 100
+    assert all(ligne.niveau is Niveau.AUCUN for ligne in table)
+
+
+def test_un_ro52_isole_rendu_sans_distinction_devient_probable(tmp_path: Path) -> None:
+    """Un dosage global ne sépare pas Ro52 de Ro60 : le faux positif est inévitable, et voulu."""
+    chemins = generer(_lupus_ro52_isole(1.0), tmp_path)
+
+    table = run_phenotype(chemins.omop)
+
+    assert all(ligne.niveau is Niveau.PROBABLE for ligne in table)

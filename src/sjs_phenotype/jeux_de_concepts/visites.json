@@ -1,0 +1,12 @@
+{
+  "nom": "visites",
+  "commentaire": "Concepts OMOP standard du domaine Visit. Ceux-là ne sont pas provisoires.",
+  "instantane_vocabulaire": {
+    "source": "OMOP standard",
+    "a_verifier": false
+  },
+  "codes": {
+    "externe": { "concept_id": 9202, "libelle": "Outpatient Visit" },
+    "hospitalisation": { "concept_id": 9201, "libelle": "Inpatient Visit" }
+  }
+}
