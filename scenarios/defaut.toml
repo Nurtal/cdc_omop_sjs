@@ -2,6 +2,7 @@ nom = "défaut"
 n_patients = 500
 graine = 0
 part_ro52_isole_si_lupus = 0.4
+absences = "null"
 debut = 2010-01-01
 fin = 2024-12-31
 

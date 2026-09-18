@@ -1,8 +1,8 @@
-nom = "recueil dégradé"
+nom = "absences à la ClickHouse"
 n_patients = 500
 graine = 0
 part_ro52_isole_si_lupus = 0.4
-absences = "null"
+absences = "defauts"
 debut = 2010-01-01
 fin = 2024-12-31
 
@@ -19,9 +19,9 @@ m35_code_a_tort = 0.05
 population_generale = 0.5
 
 [observation]
-proba_dosage_si_sjd = 0.4
-proba_dosage_si_temoin = 0.05
-proba_codage_si_sjd = 0.2
+proba_dosage_si_sjd = 0.9
+proba_dosage_si_temoin = 0.15
+proba_codage_si_sjd = 0.5
 proba_rendu_non_differencie = 0.3
 proba_traitement_si_sjd = 0.6
 proba_traitement_si_secheresse = 0.3

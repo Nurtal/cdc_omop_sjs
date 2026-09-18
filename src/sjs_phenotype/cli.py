@@ -30,6 +30,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     calcul = commandes.add_parser("phenotyper", help="calculer la table phénotype")
     calcul.add_argument("--travail", type=Path, required=True)
+    calcul.add_argument(
+        "--absences",
+        type=omop.Absences,
+        choices=list(omop.Absences),
+        default=None,
+        help="comment la source encode une valeur absente (défaut : celui du scénario)",
+    )
 
     bilan = commandes.add_parser("evaluer", help="compter les patients par Niveau et par Statut")
     bilan.add_argument("--travail", type=Path, required=True)
@@ -51,7 +58,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     resultats = options.travail / "resultats"
     if options.commande == "phenotyper":
-        table = phenotype.run_phenotype(options.travail / "omop")
+        absences = options.absences or _absences_du_scenario(options.travail)
+        print(f"Absences lues comme : {absences.value}")
+        table = phenotype.run_phenotype(
+            options.travail / "omop", phenotype.Parametres(absences=absences)
+        )
         chemin = phenotype.ecrire(table, resultats)
         print(f"Table phénotype : {chemin} ({len(table)} patients)")
         return 0
@@ -72,6 +83,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return 0
 
     raise AssertionError(f"commande non gérée : {options.commande}")
+
+
+def _absences_du_scenario(travail: Path) -> omop.Absences:
+    """Lire dans un encodage autre que celui de l'écriture donnerait de faux Statuts.
+
+    Le scénario recopié à côté du jeu dit comment il a été écrit ; à défaut, on suppose des
+    NULL, ce qui est le cas d'un export OMOP ordinaire.
+    """
+    chemin = travail / "scenario.toml"
+    if not chemin.exists():
+        return omop.Absences.NULL
+    return Scenario.charger(chemin).absences
 
 
 def _profils(travail: Path) -> dict[int, str] | None:

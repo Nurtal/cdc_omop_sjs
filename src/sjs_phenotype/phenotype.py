@@ -24,13 +24,13 @@ _REQUETE_ANTI_SSA = """
 WITH resultats AS (
     SELECT
         person_id,
-        measurement_date,
+        {jour} AS jour,
         CASE
-            WHEN value_as_concept_id = $positive THEN 'positif'
-            WHEN value_as_concept_id = $negative THEN 'négatif'
-            WHEN value_as_number IS NOT NULL AND range_high IS NOT NULL
-                 AND value_as_number > range_high THEN 'positif'
-            WHEN value_as_number IS NOT NULL AND range_high IS NOT NULL THEN 'négatif'
+            WHEN {valeur_codee} = $positive THEN 'positif'
+            WHEN {valeur_codee} = $negative THEN 'négatif'
+            WHEN {nombre} IS NOT NULL AND {seuil} IS NOT NULL
+                 AND {nombre} > {seuil} THEN 'positif'
+            WHEN {nombre} IS NOT NULL AND {seuil} IS NOT NULL THEN 'négatif'
         END AS statut
     FROM read_parquet($measurement)
     WHERE list_contains($concepts, measurement_concept_id)
@@ -39,7 +39,7 @@ SELECT
     p.person_id,
     count(r.statut) AS nb_resultats,
     count(*) FILTER (WHERE r.statut = 'positif') AS nb_positifs,
-    min(r.measurement_date) FILTER (WHERE r.statut = 'positif') AS premiere_preuve
+    min(r.jour) FILTER (WHERE r.statut = 'positif') AS premiere_preuve
 FROM read_parquet($person) p
 LEFT JOIN resultats r ON r.person_id = p.person_id
 GROUP BY p.person_id
@@ -50,14 +50,22 @@ ORDER BY p.person_id
 @dataclass(frozen=True)
 class Parametres:
     concepts: JeuDeConcepts = field(default_factory=JeuDeConcepts.par_defaut)
+    absences: omop.Absences = omop.Absences.NULL
 
 
 def run_phenotype(dossier_omop: Path, parametres: Parametres | None = None) -> list[LignePhenotype]:
     """Calcule la table phénotype pour tous les patients du dossier OMOP."""
     parametres = parametres or Parametres()
+    absences = omop.Absences(parametres.absences)
+    requete = _REQUETE_ANTI_SSA.format(
+        jour=_lue("measurement_date", "DATE", absences),
+        valeur_codee=_lue("value_as_concept_id", "BIGINT", absences),
+        nombre=_lue("value_as_number", "DOUBLE", absences),
+        seuil=_lue("range_high", "DOUBLE", absences),
+    )
     with omop.connexion() as con:
         lignes = con.execute(
-            _REQUETE_ANTI_SSA,
+            requete,
             {
                 "positive": parametres.concepts.valeur_positive,
                 "negative": parametres.concepts.valeur_negative,
@@ -67,6 +75,31 @@ def run_phenotype(dossier_omop: Path, parametres: Parametres | None = None) -> l
             },
         ).fetchall()
     return [_ligne(*brute) for brute in lignes]
+
+
+def _lue(colonne: str, type_: str, absences: omop.Absences) -> str:
+    """Neutralise la valeur par défaut d'une source qui n'accepte pas NULL.
+
+    Sans cela, un `range_high` absent encodé à 0 ferait basculer tout dosage numérique du
+    côté « négatif », et un Schirmer absent, à 0 mm, deviendrait positif (ADR-0005).
+
+    La réciproque est une perte assumée : une source qui n'accepte pas NULL ne permet plus
+    de distinguer un vrai 0 d'une absence, et le vrai 0 devient « non documenté ». On perd
+    donc un résultat plutôt que d'en inventer un — c'est aussi pourquoi le pipeline lit le
+    Parquet et non ClickHouse (ADR-0002).
+    """
+    if absences == omop.Absences.NULL:
+        return colonne
+    return f"nullif({colonne}, {_litteral(omop.SENTINELLES[type_], type_)})"
+
+
+def _litteral(sentinelle: Any, type_: str) -> str:
+    if type_ == "DATE":
+        return f"DATE '{sentinelle.isoformat()}'"
+    if type_ == "VARCHAR":
+        echappee = str(sentinelle).replace("'", "''")
+        return f"'{echappee}'"
+    return str(sentinelle)
 
 
 def _ligne(
@@ -115,7 +148,11 @@ def _dates_atteinte(
 
 
 def ecrire(table: Sequence[LignePhenotype], dossier: Path) -> Path:
-    """Écrit la table phénotype dans `<dossier>/phenotype.parquet` et rend son chemin."""
+    """Écrit la table phénotype dans `<dossier>/phenotype.parquet` et rend son chemin.
+
+    Toujours en NULL : ce que le projet produit n'a aucune raison d'imiter les valeurs par
+    défaut d'un entrepôt qui n'accepte pas l'absence.
+    """
     lignes: list[Mapping[str, Any]] = [
         {
             "person_id": ligne.person_id,

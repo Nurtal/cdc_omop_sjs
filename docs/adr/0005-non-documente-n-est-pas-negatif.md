@@ -9,3 +9,5 @@ Assimiler « non documenté » à « négatif » : plus simple, mais ne laisse s
 ## Consequences
 
 Le pipeline doit savoir si un examen a eu lieu (actes CCAM, présence d'un compte rendu), et jamais lire une valeur absente comme un 0 — d'où l'abandon de ClickHouse pour le calcul (voir ADR-0002).
+
+Lorsqu'une source n'accepte pas l'absence et la remplace par une valeur par défaut, le pipeline neutralise ces valeurs à la lecture. La réciproque est assumée : un vrai 0 n'y est plus distinguable d'une absence et devient « non documenté ». On perd donc un résultat plutôt que d'en inventer un.

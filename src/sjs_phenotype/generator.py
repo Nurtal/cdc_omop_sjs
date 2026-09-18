@@ -111,6 +111,7 @@ class Scenario:
     graine: int = 0
     parts: Mapping[Profil | str, float] = field(default_factory=lambda: dict(PARTS_PAR_DEFAUT))
     part_ro52_isole_si_lupus: float = 0.4
+    absences: omop.Absences = omop.Absences.NULL
     observation: Observation = field(default_factory=Observation)
     debut: date = date(2010, 1, 1)
     fin: date = date(2024, 12, 31)
@@ -129,6 +130,8 @@ class Scenario:
     def charger(cls, chemin: Path) -> Scenario:
         contenu: dict[str, Any] = tomllib.loads(chemin.read_text(encoding="utf-8"))
         observation = Observation(**contenu.pop("observation", {}))
+        if "absences" in contenu:
+            contenu["absences"] = omop.Absences(contenu["absences"])
         parts = contenu.pop("parts", None)
         scenario = cls(**contenu, observation=observation)
         return replace(scenario, parts=parts) if parts is not None else scenario
@@ -139,6 +142,7 @@ class Scenario:
             f"n_patients = {self.n_patients}",
             f"graine = {self.graine}",
             f"part_ro52_isole_si_lupus = {self.part_ro52_isole_si_lupus}",
+            f'absences = "{self.absences.value}"',
             f"debut = {self.debut.isoformat()}",
             f"fin = {self.fin.isoformat()}",
             "",
@@ -225,7 +229,7 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
         "condition_occurrence",
         "drug_exposure",
     ):
-        omop.ecrire_table(dossier_omop, nom, tables[nom])
+        omop.ecrire_table(dossier_omop, nom, tables[nom], absences=scenario.absences)
     chemin_etat_reel = omop.ecrire_table(sortie, "etat_reel", tables["etat_reel"])
     chemin_scenario = sortie / "scenario.toml"
     chemin_scenario.write_text(scenario.en_toml(), encoding="utf-8")
@@ -359,10 +363,13 @@ def _dosages(
         # positif ». C'est le faux positif que la Définition computable doit affronter.
         concept = anti_ssa.anti_ssa_non_differencie[0]
         positif = recette.anti_ssa_reel or recette.anti_ro52_reel
-    elif recette.anti_ro52_reel and not recette.anti_ssa_reel:
-        concept, positif = anti_ssa.anti_ro52[0], True
+        rendus = [(concept, positif)]
     else:
-        concept, positif = anti_ssa.anti_ro60[0], recette.anti_ssa_reel
+        # Un panel qui différencie rend les deux analytes, quel que soit le patient.
+        rendus = [
+            (anti_ssa.anti_ro60[0], recette.anti_ssa_reel),
+            (anti_ssa.anti_ro52[0], recette.anti_ro52_reel),
+        ]
 
     venue = _venue(tirages, venues, 0)
     return [
@@ -379,6 +386,7 @@ def _dosages(
             "measurement_source_value": "anti-SSA",
             "visit_occurrence_id": venue["visit_occurrence_id"],
         }
+        for concept, positif in rendus
     ]
 
 
