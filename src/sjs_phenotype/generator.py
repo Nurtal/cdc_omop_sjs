@@ -25,6 +25,8 @@ from typing import Any
 from sjs_phenotype import omop
 from sjs_phenotype.concepts import Vocabulaire
 
+CODE_VHC = "B18.2"
+
 
 class Profil(StrEnum):
     """Ce qu'un patient synthétique est vraiment. Invisible pour la Définition computable."""
@@ -53,6 +55,7 @@ class Recette:
     connectivite: bool = False
     lymphome: bool = False
     exclusion: bool = False
+    critere_exclusion: str = ""
     code_sjd_a_tort: bool = False
 
 
@@ -111,6 +114,7 @@ class Scenario:
     graine: int = 0
     parts: Mapping[Profil | str, float] = field(default_factory=lambda: dict(PARTS_PAR_DEFAUT))
     part_ro52_isole_si_lupus: float = 0.4
+    part_vhc_actif_si_exclusion: float = 0.7
     absences: omop.Absences = omop.Absences.NULL
     observation: Observation = field(default_factory=Observation)
     debut: date = date(2010, 1, 1)
@@ -142,6 +146,7 @@ class Scenario:
             f"n_patients = {self.n_patients}",
             f"graine = {self.graine}",
             f"part_ro52_isole_si_lupus = {self.part_ro52_isole_si_lupus}",
+            f"part_vhc_actif_si_exclusion = {self.part_vhc_actif_si_exclusion}",
             f'absences = "{self.absences.value}"',
             f"debut = {self.debut.isoformat()}",
             f"fin = {self.fin.isoformat()}",
@@ -183,10 +188,17 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
         # Tiré pour tout le monde, appliqué au seul lupus : le flux de l'État réel ne doit
         # pas dépendre de la composition des profils.
         ro52_isole = reel.random() < scenario.part_ro52_isole_si_lupus
+        maladie_excluante = reel.choice(vocabulaire.diagnostics.groupe("criteres_exclusion"))
+        vhc_actif = reel.random() < scenario.part_vhc_actif_si_exclusion
         recette = RECETTES[profil]
         if profil is Profil.LUPUS_ANTI_SSA and ro52_isole:
             # Un anti-Ro52 isolé n'est pas un Anti-SSA : ce patient ne doit jamais compter.
             recette = replace(recette, anti_ssa_reel=False, anti_ro52_reel=True)
+        if recette.exclusion:
+            # Une hépatite C chronique mais inactive n'exclut pas : le critère vise
+            # l'hépatite active, et l'État réel doit dire la même chose que la règle.
+            exclut = maladie_excluante != CODE_VHC or vhc_actif
+            recette = replace(recette, critere_exclusion=maladie_excluante, exclusion=exclut)
         tables["person"].append(
             {
                 "person_id": person_id,
@@ -206,6 +218,8 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
                 "connectivite": recette.connectivite,
                 "lymphome": recette.lymphome,
                 "exclusion": recette.exclusion,
+                "critere_exclusion": recette.critere_exclusion,
+                "vhc_actif": vhc_actif if recette.critere_exclusion == CODE_VHC else None,
             }
         )
         tirages = _tirer(scenario, observation, vocabulaire)
@@ -213,6 +227,9 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
         tables["visit_occurrence"] += venues
         tables["measurement"] += _dosages(
             person_id, recette, scenario, tirages, vocabulaire, compteur, venues
+        )
+        tables["measurement"] += _biologie(
+            person_id, recette, vhc_actif, tirages, vocabulaire, compteur, venues
         )
         tables["condition_occurrence"] += _diagnostics(
             person_id, recette, scenario, tirages, vocabulaire, compteur, venues
@@ -267,7 +284,6 @@ class Tirages:
     u_traitement_secheresse: float
     code_connectivite: str
     code_lupus: str
-    code_exclusion: str
     code_evocateur: str
     code_assechant: str
 
@@ -289,7 +305,6 @@ def _tirer(scenario: Scenario, observation: random.Random, vocabulaire: Vocabula
         u_traitement_secheresse=observation.random(),
         code_connectivite=observation.choice(diagnostics.groupe("connectivites")),
         code_lupus=observation.choice(diagnostics.groupe("lupus_ou_myosite")),
-        code_exclusion=observation.choice(diagnostics.groupe("criteres_exclusion")),
         code_evocateur=observation.choice(medicaments.groupe("evocateurs_sjd")),
         code_assechant=observation.choice(medicaments.groupe("assechants")),
     )
@@ -390,6 +405,37 @@ def _dosages(
     ]
 
 
+def _biologie(
+    person_id: int,
+    recette: Recette,
+    vhc_actif: bool,
+    tirages: Tirages,
+    vocabulaire: Vocabulaire,
+    compteur: _Compteur,
+    venues: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Une hépatite C codée s'accompagne d'une PCR : c'est elle qui dit si elle est active."""
+    if recette.critere_exclusion != CODE_VHC:
+        return []
+
+    venue = _venue(tirages, venues, 4)
+    return [
+        {
+            "measurement_id": compteur.suivant("measurement"),
+            "person_id": person_id,
+            "measurement_concept_id": vocabulaire.biologie.concept("pcr_vhc"),
+            "measurement_date": venue["visit_start_date"],
+            "value_as_number": None,
+            "value_as_concept_id": (
+                vocabulaire.valeur_positive if vhc_actif else vocabulaire.valeur_negative
+            ),
+            "range_high": None,
+            "measurement_source_value": "PCR VHC",
+            "visit_occurrence_id": venue["visit_occurrence_id"],
+        }
+    ]
+
+
 def _diagnostics(
     person_id: int,
     recette: Recette,
@@ -410,8 +456,8 @@ def _diagnostics(
         codes.append(tirages.code_lupus if not recette.sjd else tirages.code_connectivite)
     if recette.lymphome:
         codes.append("C88.4")
-    if recette.exclusion:
-        codes.append(tirages.code_exclusion)
+    if recette.critere_exclusion:
+        codes.append(recette.critere_exclusion)
     if recette.secheresse and not recette.sjd:
         codes.append("R68.2")
 

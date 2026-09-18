@@ -13,6 +13,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from sjs_phenotype import omop, phenotype
+from sjs_phenotype.concepts import Vocabulaire
 from sjs_phenotype.evaluation import evaluer, formater
 from sjs_phenotype.generator import Scenario, generer
 
@@ -75,7 +76,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        effectifs = evaluer(phenotype.lire(chemin), profils=_profils(options.travail))
+        effectifs = evaluer(
+            phenotype.lire(chemin),
+            profils=_profils(options.travail),
+            criteres_non_appliques=Vocabulaire.par_defaut().criteres_exclusion_non_appliques,
+        )
         (resultats / "effectifs.json").write_text(
             json.dumps(effectifs.en_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )

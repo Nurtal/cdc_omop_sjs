@@ -1,0 +1,17 @@
+{
+  "nom": "biologie",
+  "commentaire": "Résultats biologiques hors Auto-anticorps mobilisés par le projet. La PCR VHC sert le Critère d'exclusion « hépatite C active » : le code CIM-10 seul ne suffit pas.",
+  "instantane_vocabulaire": {
+    "source": "provisoire",
+    "date": null,
+    "empreinte": null,
+    "a_verifier": true,
+    "note": "Identifiants locaux (>= 2 000 000 000) en attendant la vérification Athena."
+  },
+  "codes": {
+    "pcr_vhc": {
+      "concept_id": 2000003000,
+      "libelle": "ARN du virus de l'hépatite C (PCR)"
+    }
+  }
+}

@@ -55,23 +55,37 @@ class Table:
     concepts: Mapping[str, int]
     libelles: Mapping[str, str]
     groupes: Mapping[str, tuple[str, ...]]
+    listes: Mapping[str, tuple[str, ...]]
 
     def concept(self, code: str) -> int:
         return self.concepts[code]
 
+    def code(self, concept_id: int) -> str:
+        """Le code d'un concept. Les tables OMOP portent l'identifiant, pas le libellé."""
+        return self._par_concept[concept_id]
+
+    @property
+    def _par_concept(self) -> Mapping[int, str]:
+        return {concept_id: code for code, concept_id in self.concepts.items()}
+
     def groupe(self, nom: str) -> tuple[str, ...]:
+        """Un groupe ne contient que des codes, résolubles par `concept`."""
         return self.groupes[nom]
+
+    def liste(self, nom: str) -> tuple[str, ...]:
+        """Une liste de libellés, sans code ni concept derrière."""
+        return self.listes[nom]
 
     @classmethod
     def charger(cls, fichier: str) -> Table:
         chemin = resources.files("sjs_phenotype.jeux_de_concepts") / fichier
         contenu = json.loads(chemin.read_text(encoding="utf-8"))
         codes: dict[str, dict[str, Any]] = contenu["codes"]
-        groupes = {nom: tuple(membres) for nom, membres in contenu.get("groupes", {}).items()}
         return cls(
             concepts={code: int(detail["concept_id"]) for code, detail in codes.items()},
             libelles={code: str(detail["libelle"]) for code, detail in codes.items()},
-            groupes=groupes,
+            groupes={nom: tuple(membres) for nom, membres in contenu.get("groupes", {}).items()},
+            listes={nom: tuple(membres) for nom, membres in contenu.get("listes", {}).items()},
         )
 
 
@@ -80,14 +94,30 @@ class Vocabulaire:
     """Tous les jeux de concepts du projet, chargés d'un coup."""
 
     anti_ssa: JeuDeConcepts
+    biologie: Table
     diagnostics: Table
     medicaments: Table
     visites: Table
+
+    @property
+    def valeur_positive(self) -> int:
+        """Concept de résultat « positif », commun à tous les examens codés."""
+        return self.anti_ssa.valeur_positive
+
+    @property
+    def valeur_negative(self) -> int:
+        return self.anti_ssa.valeur_negative
+
+    @property
+    def criteres_exclusion_non_appliques(self) -> tuple[str, ...]:
+        """Les Critères d'exclusion ACR/EULAR sans code CIM-10 OMS spécifique."""
+        return self.diagnostics.liste("criteres_exclusion_non_appliques")
 
     @classmethod
     def par_defaut(cls) -> Vocabulaire:
         return cls(
             anti_ssa=JeuDeConcepts.par_defaut(),
+            biologie=Table.charger("biologie.json"),
             diagnostics=Table.charger("diagnostics.json"),
             medicaments=Table.charger("medicaments.json"),
             visites=Table.charger("visites.json"),
