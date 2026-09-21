@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from sjs_phenotype import omop
 from sjs_phenotype.cli import main
 
 
@@ -97,3 +98,54 @@ def test_les_resultats_de_concordance_ne_secrasent_pas(tmp_path: Path) -> None:
 
     produits = sorted(p.name for p in (travail / "resultats").glob("concordance-*.json"))
     assert len(produits) == 3
+
+
+def test_les_performances_sortent_sur_un_jeu_synthetique(tmp_path: Path) -> None:
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "120"])
+    main(["phenotyper", "--travail", str(travail)])
+
+    assert main(["evaluer", "--travail", str(travail)]) == 0
+
+    (fichier,) = (travail / "resultats").glob("performances-*.json")
+    resultat = json.loads(fichier.read_text())
+    assert "sensibilite" in resultat
+    assert "avertissement" in resultat
+
+
+def test_sans_etat_reel_aucune_performance_nest_publiee(tmp_path: Path) -> None:
+    """Sur l'EDS il n'y a pas de référence : le bloc doit simplement ne pas exister."""
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "40"])
+    main(["phenotyper", "--travail", str(travail)])
+    (travail / "etat_reel.parquet").unlink()
+
+    assert main(["evaluer", "--travail", str(travail)]) == 0
+
+    assert not list((travail / "resultats").glob("performances-*.json"))
+
+
+def test_les_resultats_avec_et_sans_exclus_ne_secrasent_pas(tmp_path: Path) -> None:
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "60"])
+    main(["phenotyper", "--travail", str(travail)])
+
+    main(["evaluer", "--travail", str(travail)])
+    main(["evaluer", "--travail", str(travail), "--avec-exclus"])
+
+    produits = sorted(p.name for p in (travail / "resultats").glob("performances-*.json"))
+    assert len(produits) == 2
+
+
+def test_un_etat_reel_incomplet_est_refuse(tmp_path: Path) -> None:
+    """Un statut SjD absent n'est pas un témoin : mieux vaut refuser que deviner."""
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "20"])
+    main(["phenotyper", "--travail", str(travail)])
+
+    lignes = omop.lire(travail / "etat_reel.parquet")
+    lignes[0]["sjd"] = None
+    omop.ecrire_table(travail, "etat_reel", lignes)
+
+    with pytest.raises(ValueError, match="État réel incomplet"):
+        main(["evaluer", "--travail", str(travail)])

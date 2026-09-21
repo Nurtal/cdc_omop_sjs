@@ -9,7 +9,7 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sjs_phenotype import omop, phenotype
@@ -21,6 +21,8 @@ from sjs_phenotype.evaluation import (
     evaluer,
     formater,
     formater_concordance,
+    formater_performances,
+    performances,
 )
 from sjs_phenotype.generator import Scenario, generer
 from sjs_phenotype.modele import Niveau
@@ -104,9 +106,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
             )
             return 1
         table = phenotype.lire(chemin)
+        etat_reel = _etat_reel(options.travail)
         effectifs = evaluer(
             table,
-            profils=_profils(options.travail),
+            profils=etat_reel.profils if etat_reel else None,
             criteres_non_appliques=Vocabulaire.par_defaut().criteres_exclusion_non_appliques,
         )
         (resultats / "effectifs.json").write_text(
@@ -132,13 +135,29 @@ def main(arguments: Sequence[str] | None = None) -> int:
             exclus_retires=not options.avec_exclus,
             occurrences_minimum=options.occurrences_cim10,
         )
-        nom = f"concordance-{'-'.join(n.name.lower() for n in options.niveaux)}"
-        nom += f"-cim10x{options.occurrences_cim10}"
+        suffixe = "-".join(niveau.name.lower() for niveau in options.niveaux)
+        if options.avec_exclus:
+            suffixe += "-avec-exclus"
+        nom = f"concordance-{suffixe}-cim10x{options.occurrences_cim10}"
         (resultats / f"{nom}.json").write_text(
             json.dumps(accord.en_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         print()
         print(formater_concordance(accord))
+
+        if etat_reel is not None:
+            resultat = performances(
+                table,
+                etat_reel.sjd,
+                niveaux=options.niveaux,
+                exclus_retires=not options.avec_exclus,
+            )
+            (resultats / f"performances-{suffixe}.json").write_text(
+                json.dumps(resultat.en_json(), ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            print()
+            print(formater_performances(resultat))
         return 0
 
     raise AssertionError(f"commande non gérée : {options.commande}")
@@ -164,12 +183,33 @@ def _absences_du_scenario(travail: Path) -> omop.Absences:
     return Scenario.charger(chemin).absences
 
 
-def _profils(travail: Path) -> dict[int, str] | None:
-    """L'État réel n'existe que pour un jeu synthétique ; sur l'EDS, il n'y en a pas."""
+@dataclass(frozen=True)
+class EtatReel:
+    """L'État réel d'un jeu synthétique. Sur l'EDS, il n'y en a pas."""
+
+    profils: dict[int, str]
+    sjd: dict[int, bool]
+
+
+def _etat_reel(travail: Path) -> EtatReel | None:
+    """Lit l'État réel une seule fois, et refuse d'inventer ce qu'il ne dit pas.
+
+    Un statut absent n'est pas un témoin : le laisser devenir `False` ferait d'une absence
+    un résultat, ce qu'ADR-0005 interdit partout ailleurs.
+    """
     chemin = travail / "etat_reel.parquet"
     if not chemin.exists():
         return None
-    return {int(ligne["person_id"]): str(ligne["profil"]) for ligne in omop.lire(chemin)}
+
+    profils: dict[int, str] = {}
+    sjd: dict[int, bool] = {}
+    for ligne in omop.lire(chemin):
+        person_id = int(ligne["person_id"])
+        if ligne["sjd"] is None or ligne["profil"] is None:
+            raise ValueError(f"État réel incomplet pour le patient {person_id}")
+        profils[person_id] = str(ligne["profil"])
+        sjd[person_id] = bool(ligne["sjd"])
+    return EtatReel(profils=profils, sjd=sjd)
 
 
 if __name__ == "__main__":

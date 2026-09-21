@@ -100,6 +100,7 @@ class Vocabulaire:
     biologie: Table
     diagnostics: Table
     medicaments: Table
+    notes: Table
     visites: Table
 
     @property
@@ -123,5 +124,6 @@ class Vocabulaire:
             biologie=Table.charger("biologie.json"),
             diagnostics=Table.charger("diagnostics.json"),
             medicaments=Table.charger("medicaments.json"),
+            notes=Table.charger("notes.json"),
             visites=Table.charger("visites.json"),
         )
