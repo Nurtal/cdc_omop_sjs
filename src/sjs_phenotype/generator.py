@@ -23,7 +23,16 @@ from pathlib import Path
 from typing import Any
 
 from sjs_phenotype import omop
-from sjs_phenotype.concepts import Vocabulaire
+from sjs_phenotype.concepts import CODE_SJD, Table, Vocabulaire
+from sjs_phenotype.redaction import (
+    SIALADENITE_ABSENTE,
+    SIALADENITE_FOCALE,
+    SIALADENITES_NON_FOCALES,
+    Biopsie,
+    compte_rendu_biopsie,
+    courrier_secheresse,
+    grade_pour,
+)
 
 CODE_VHC = "B18.2"
 
@@ -99,9 +108,12 @@ class Observation:
     proba_dosage_si_sjd: float = 0.9
     proba_dosage_si_temoin: float = 0.15
     proba_codage_si_sjd: float = 0.5
+    proba_recodage_a_chaque_venue: float = 0.5
     proba_rendu_non_differencie: float = 0.3
     proba_traitement_si_sjd: float = 0.6
     proba_traitement_si_secheresse: float = 0.3
+    proba_courrier_si_secheresse: float = 0.8
+    proba_bilan_secheresse_si_temoin: float = 0.1
     venues_par_patient: int = 3
 
 
@@ -115,6 +127,7 @@ class Scenario:
     parts: Mapping[Profil | str, float] = field(default_factory=lambda: dict(PARTS_PAR_DEFAUT))
     part_ro52_isole_si_lupus: float = 0.4
     part_vhc_actif_si_exclusion: float = 0.7
+    part_compte_rendu_manquant: float = 0.15
     absences: omop.Absences = omop.Absences.NULL
     observation: Observation = field(default_factory=Observation)
     debut: date = date(2010, 1, 1)
@@ -147,6 +160,7 @@ class Scenario:
             f"graine = {self.graine}",
             f"part_ro52_isole_si_lupus = {self.part_ro52_isole_si_lupus}",
             f"part_vhc_actif_si_exclusion = {self.part_vhc_actif_si_exclusion}",
+            f"part_compte_rendu_manquant = {self.part_compte_rendu_manquant}",
             f'absences = "{self.absences.value}"',
             f"debut = {self.debut.isoformat()}",
             f"fin = {self.fin.isoformat()}",
@@ -180,6 +194,8 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
         "measurement": [],
         "condition_occurrence": [],
         "drug_exposure": [],
+        "note": [],
+        "procedure_occurrence": [],
         "etat_reel": [],
     }
     compteur = _Compteur()
@@ -190,6 +206,9 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
         ro52_isole = reel.random() < scenario.part_ro52_isole_si_lupus
         maladie_excluante = reel.choice(vocabulaire.diagnostics.groupe("criteres_exclusion"))
         vhc_actif = reel.random() < scenario.part_vhc_actif_si_exclusion
+        # Tirés pour tout le monde, appliqués aux seuls patients concernés : le flux de
+        # l'État réel ne doit pas dépendre de la composition des profils.
+        faits = _faits_cliniques(reel)
         recette = RECETTES[profil]
         if profil is Profil.LUPUS_ANTI_SSA and ro52_isole:
             # Un anti-Ro52 isolé n'est pas un Anti-SSA : ce patient ne doit jamais compter.
@@ -206,6 +225,13 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
                 "year_of_birth": reel.randint(1940, 1995),
             }
         )
+        tirages = _tirer(scenario, observation, vocabulaire)
+        redaction = random.Random(tirages.graine_redaction)
+        compte_rendu_manquant = (
+            tirages.u_compte_rendu_manquant < scenario.part_compte_rendu_manquant
+        )
+        biopsie = faits.biopsie if recette.biopsie else None
+        secheresse = faits.secheresse if recette.secheresse else None
         tables["etat_reel"].append(
             {
                 "person_id": person_id,
@@ -220,9 +246,14 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
                 "exclusion": recette.exclusion,
                 "critere_exclusion": recette.critere_exclusion,
                 "vhc_actif": vhc_actif if recette.critere_exclusion == CODE_VHC else None,
+                "focus_score": biopsie.focus_score if biopsie else None,
+                "grade_chisholm": biopsie.grade_chisholm if biopsie else None,
+                "sialadenite": biopsie.sialadenite if biopsie else None,
+                "schirmer": secheresse[0] if secheresse else None,
+                "oss": secheresse[1] if secheresse else None,
+                "debit_salivaire": secheresse[2] if secheresse else None,
             }
         )
-        tirages = _tirer(scenario, observation, vocabulaire)
         venues = _venues(person_id, tirages, vocabulaire, compteur)
         tables["visit_occurrence"] += venues
         tables["measurement"] += _dosages(
@@ -237,6 +268,47 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
         tables["drug_exposure"] += _traitements(
             person_id, recette, scenario, tirages, vocabulaire, compteur, venues
         )
+        if biopsie is not None:
+            tables["procedure_occurrence"] += _acte_biopsie(
+                person_id, tirages, vocabulaire, compteur, venues
+            )
+            if not compte_rendu_manquant:
+                tables["note"].append(
+                    _note(
+                        person_id,
+                        "anatomopathologie",
+                        "Compte rendu d'anatomopathologie",
+                        compte_rendu_biopsie(biopsie, redaction),
+                        tirages,
+                        vocabulaire,
+                        compteur,
+                        venues,
+                        rang=2,
+                    )
+                )
+        # Un bilan de sécheresse n'est ni systématique chez le malade, ni impossible chez
+        # le témoin : sans cela, la seule présence du courrier trahirait l'État réel.
+        courrier_redige = (
+            tirages.u_courrier_manquant < scenario.observation.proba_courrier_si_secheresse
+            if recette.secheresse
+            else tirages.u_bilan_secheresse_temoin
+            < scenario.observation.proba_bilan_secheresse_si_temoin
+        )
+        if courrier_redige:
+            secheresse = faits.secheresse
+            tables["note"].append(
+                _note(
+                    person_id,
+                    "courrier",
+                    "Courrier de consultation",
+                    courrier_secheresse(*secheresse, redaction),
+                    tirages,
+                    vocabulaire,
+                    compteur,
+                    venues,
+                    rang=3,
+                )
+            )
 
     dossier_omop = sortie / "omop"
     for nom in (
@@ -245,6 +317,8 @@ def generer(scenario: Scenario, sortie: Path) -> CheminsJeu:
         "measurement",
         "condition_occurrence",
         "drug_exposure",
+        "note",
+        "procedure_occurrence",
     ):
         omop.ecrire_table(dossier_omop, nom, tables[nom], absences=scenario.absences)
     chemin_etat_reel = omop.ecrire_table(sortie, "etat_reel", tables["etat_reel"])
@@ -280,6 +354,11 @@ class Tirages:
     u_dosage: float
     u_rendu_non_differencie: float
     u_codage_sjd: float
+    u_recodages: tuple[float, ...]
+    u_compte_rendu_manquant: float
+    u_courrier_manquant: float
+    u_bilan_secheresse_temoin: float
+    graine_redaction: int
     u_traitement_sjd: float
     u_traitement_secheresse: float
     code_connectivite: str
@@ -301,6 +380,11 @@ def _tirer(scenario: Scenario, observation: random.Random, vocabulaire: Vocabula
         u_dosage=observation.random(),
         u_rendu_non_differencie=observation.random(),
         u_codage_sjd=observation.random(),
+        u_recodages=tuple(observation.random() for _ in range(maximum)),
+        u_compte_rendu_manquant=observation.random(),
+        u_courrier_manquant=observation.random(),
+        u_bilan_secheresse_temoin=observation.random(),
+        graine_redaction=observation.randrange(2**32),
         u_traitement_sjd=observation.random(),
         u_traitement_secheresse=observation.random(),
         code_connectivite=observation.choice(diagnostics.groupe("connectivites")),
@@ -451,7 +535,7 @@ def _diagnostics(
         tirages.u_codage_sjd < scenario.observation.proba_codage_si_sjd
     )
     if code_sjd_pose or recette.code_sjd_a_tort:
-        codes.append("M35.0")
+        codes.append(CODE_SJD)
     if recette.connectivite:
         codes.append(tirages.code_lupus if not recette.sjd else tirages.code_connectivite)
     if recette.lymphome:
@@ -464,17 +548,35 @@ def _diagnostics(
     lignes = []
     for rang, code in enumerate(codes, start=1):
         venue = _venue(tirages, venues, rang)
-        lignes.append(
-            {
-                "condition_occurrence_id": compteur.suivant("condition_occurrence"),
-                "person_id": person_id,
-                "condition_concept_id": diagnostics.concept(code),
-                "condition_start_date": venue["visit_start_date"],
-                "condition_source_value": code,
-                "visit_occurrence_id": venue["visit_occurrence_id"],
-            }
-        )
+        lignes.append(_diagnostic(person_id, code, diagnostics, venue, compteur))
+        if code != CODE_SJD:
+            continue
+        # Un patient suivi est recodé à ses venues *suivantes* : sans cela, la variante de
+        # Robustesse du Comparateur CIM-10 (deux occurrences) ne retiendrait personne. Le
+        # recodage part de la venue qui porte déjà le code, sinon il la redouble sans
+        # ajouter la moindre date distincte.
+        depart = venues.index(venue) + 1
+        for venue_suivante, u_recodage in zip(venues[depart:], tirages.u_recodages, strict=False):
+            if u_recodage < scenario.observation.proba_recodage_a_chaque_venue:
+                lignes.append(_diagnostic(person_id, code, diagnostics, venue_suivante, compteur))
     return lignes
+
+
+def _diagnostic(
+    person_id: int,
+    code: str,
+    diagnostics: Table,
+    venue: Mapping[str, Any],
+    compteur: _Compteur,
+) -> dict[str, Any]:
+    return {
+        "condition_occurrence_id": compteur.suivant("condition_occurrence"),
+        "person_id": person_id,
+        "condition_concept_id": diagnostics.concept(code),
+        "condition_start_date": venue["visit_start_date"],
+        "condition_source_value": code,
+        "visit_occurrence_id": venue["visit_occurrence_id"],
+    }
 
 
 def _traitements(
@@ -515,3 +617,91 @@ def _traitements(
             }
         )
     return lignes
+
+
+@dataclass(frozen=True)
+class FaitsCliniques:
+    """Ce qu'une biopsie et un bilan de sécheresse montreraient, s'ils étaient faits."""
+
+    biopsie: Biopsie
+    secheresse: tuple[int, int, float]
+
+
+def _faits_cliniques(reel: random.Random) -> FaitsCliniques:
+    """Tirés pour tout patient, appliqués aux seuls profils concernés.
+
+    La nature de la sialadénite commande le focus score : une sialadénite sclérosante ou
+    granulomateuse ne permet aucun décompte de foyers, une glande normale en donne un à
+    zéro. Le grade de Chisholm-Mason découle ensuite du score. Sans cette cohérence, un
+    extracteur lisant correctement le compte rendu serait compté en erreur.
+    """
+    tirage = reel.random()
+    if tirage < 0.10:
+        sialadenite = reel.choice(SIALADENITES_NON_FOCALES)
+        focus_score: float | None = None
+    elif tirage < 0.35:
+        sialadenite = SIALADENITE_ABSENTE
+        focus_score = 0.0
+    elif tirage < 0.50:
+        sialadenite = SIALADENITE_FOCALE
+        focus_score = reel.choice([0.3, 0.5, 0.8])
+    else:
+        sialadenite = SIALADENITE_FOCALE
+        focus_score = round(reel.uniform(1.0, 4.0), 1)
+
+    return FaitsCliniques(
+        biopsie=Biopsie(
+            focus_score=focus_score,
+            grade_chisholm=grade_pour(focus_score),
+            sialadenite=sialadenite,
+        ),
+        secheresse=(
+            reel.randint(0, 15),
+            reel.randint(0, 10),
+            round(reel.uniform(0.0, 0.4), 2),
+        ),
+    )
+
+
+def _acte_biopsie(
+    person_id: int,
+    tirages: Tirages,
+    vocabulaire: Vocabulaire,
+    compteur: _Compteur,
+    venues: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """L'acte dit qu'une biopsie a eu lieu, même quand son compte rendu manque."""
+    venue = _venue(tirages, venues, 2)
+    return [
+        {
+            "procedure_occurrence_id": compteur.suivant("procedure_occurrence"),
+            "person_id": person_id,
+            "procedure_concept_id": vocabulaire.notes.concept("biopsie_glande_salivaire"),
+            "procedure_date": venue["visit_start_date"],
+            "procedure_source_value": "HAHB001",
+            "visit_occurrence_id": venue["visit_occurrence_id"],
+        }
+    ]
+
+
+def _note(
+    person_id: int,
+    classe: str,
+    titre: str,
+    texte: str,
+    tirages: Tirages,
+    vocabulaire: Vocabulaire,
+    compteur: _Compteur,
+    venues: Sequence[Mapping[str, Any]],
+    rang: int,
+) -> dict[str, Any]:
+    venue = _venue(tirages, venues, rang)
+    return {
+        "note_id": compteur.suivant("note"),
+        "person_id": person_id,
+        "note_date": venue["visit_start_date"],
+        "note_class_concept_id": vocabulaire.notes.concept(classe),
+        "note_title": titre,
+        "note_text": texte,
+        "visit_occurrence_id": venue["visit_occurrence_id"],
+    }

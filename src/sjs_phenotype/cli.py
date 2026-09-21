@@ -9,13 +9,23 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sjs_phenotype import omop, phenotype
+from sjs_phenotype.comparateur import Comparateur, comparateur_cim10
 from sjs_phenotype.concepts import Vocabulaire
-from sjs_phenotype.evaluation import evaluer, formater
+from sjs_phenotype.evaluation import (
+    NIVEAUX_IDENTIFIES,
+    concordance,
+    evaluer,
+    formater,
+    formater_concordance,
+    formater_performances,
+    performances,
+)
 from sjs_phenotype.generator import Scenario, generer
+from sjs_phenotype.modele import Niveau
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
@@ -41,6 +51,25 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     bilan = commandes.add_parser("evaluer", help="compter les patients par Niveau et par Statut")
     bilan.add_argument("--travail", type=Path, required=True)
+    bilan.add_argument(
+        "--occurrences-cim10",
+        type=_entier_positif,
+        default=1,
+        help="occurrences distinctes de M35.0 pour entrer dans le Comparateur CIM-10",
+    )
+    bilan.add_argument(
+        "--niveaux",
+        nargs="+",
+        type=Niveau,
+        choices=[Niveau.DEFINI, Niveau.PROBABLE],
+        default=list(NIVEAUX_IDENTIFIES),
+        help="Niveaux comptés comme identifiés (défaut : défini et probable)",
+    )
+    bilan.add_argument(
+        "--avec-exclus",
+        action="store_true",
+        help="compter aussi les Exclus parmi les identifiés",
+    )
 
     options = analyseur.parse_args(arguments)
 
@@ -76,18 +105,70 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        table = phenotype.lire(chemin)
+        etat_reel = _etat_reel(options.travail)
         effectifs = evaluer(
-            phenotype.lire(chemin),
-            profils=_profils(options.travail),
+            table,
+            profils=etat_reel.profils if etat_reel else None,
             criteres_non_appliques=Vocabulaire.par_defaut().criteres_exclusion_non_appliques,
         )
         (resultats / "effectifs.json").write_text(
             json.dumps(effectifs.en_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         print(formater(effectifs))
+
+        dossier_omop = options.travail / "omop"
+        if not dossier_omop.exists():
+            print(
+                f"Dossier OMOP introuvable : {dossier_omop}. "
+                "La Concordance avec le Comparateur CIM-10 n'est pas calculable.",
+                file=sys.stderr,
+            )
+            return 1
+
+        accord = concordance(
+            table,
+            comparateur_cim10(
+                dossier_omop, Comparateur(occurrences_minimum=options.occurrences_cim10)
+            ),
+            niveaux=options.niveaux,
+            exclus_retires=not options.avec_exclus,
+            occurrences_minimum=options.occurrences_cim10,
+        )
+        suffixe = "-".join(niveau.name.lower() for niveau in options.niveaux)
+        if options.avec_exclus:
+            suffixe += "-avec-exclus"
+        nom = f"concordance-{suffixe}-cim10x{options.occurrences_cim10}"
+        (resultats / f"{nom}.json").write_text(
+            json.dumps(accord.en_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        print()
+        print(formater_concordance(accord))
+
+        if etat_reel is not None:
+            resultat = performances(
+                table,
+                etat_reel.sjd,
+                niveaux=options.niveaux,
+                exclus_retires=not options.avec_exclus,
+            )
+            (resultats / f"performances-{suffixe}.json").write_text(
+                json.dumps(resultat.en_json(), ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            print()
+            print(formater_performances(resultat))
         return 0
 
     raise AssertionError(f"commande non gérée : {options.commande}")
+
+
+def _entier_positif(valeur: str) -> int:
+    """Argparse rejette un seuil invalide avant qu'un seul résultat ne soit écrit."""
+    nombre = int(valeur)
+    if nombre < 1:
+        raise argparse.ArgumentTypeError("doit valoir au moins 1")
+    return nombre
 
 
 def _absences_du_scenario(travail: Path) -> omop.Absences:
@@ -102,12 +183,33 @@ def _absences_du_scenario(travail: Path) -> omop.Absences:
     return Scenario.charger(chemin).absences
 
 
-def _profils(travail: Path) -> dict[int, str] | None:
-    """L'État réel n'existe que pour un jeu synthétique ; sur l'EDS, il n'y en a pas."""
+@dataclass(frozen=True)
+class EtatReel:
+    """L'État réel d'un jeu synthétique. Sur l'EDS, il n'y en a pas."""
+
+    profils: dict[int, str]
+    sjd: dict[int, bool]
+
+
+def _etat_reel(travail: Path) -> EtatReel | None:
+    """Lit l'État réel une seule fois, et refuse d'inventer ce qu'il ne dit pas.
+
+    Un statut absent n'est pas un témoin : le laisser devenir `False` ferait d'une absence
+    un résultat, ce qu'ADR-0005 interdit partout ailleurs.
+    """
     chemin = travail / "etat_reel.parquet"
     if not chemin.exists():
         return None
-    return {int(ligne["person_id"]): str(ligne["profil"]) for ligne in omop.lire(chemin)}
+
+    profils: dict[int, str] = {}
+    sjd: dict[int, bool] = {}
+    for ligne in omop.lire(chemin):
+        person_id = int(ligne["person_id"])
+        if ligne["sjd"] is None or ligne["profil"] is None:
+            raise ValueError(f"État réel incomplet pour le patient {person_id}")
+        profils[person_id] = str(ligne["profil"])
+        sjd[person_id] = bool(ligne["sjd"])
+    return EtatReel(profils=profils, sjd=sjd)
 
 
 if __name__ == "__main__":
