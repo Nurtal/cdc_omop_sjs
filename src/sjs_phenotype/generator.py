@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any
 
 from sjs_phenotype import omop
-from sjs_phenotype.concepts import Vocabulaire
+from sjs_phenotype.comparateur import CODE_SJD
+from sjs_phenotype.concepts import Table, Vocabulaire
 
 CODE_VHC = "B18.2"
 
@@ -99,6 +100,7 @@ class Observation:
     proba_dosage_si_sjd: float = 0.9
     proba_dosage_si_temoin: float = 0.15
     proba_codage_si_sjd: float = 0.5
+    proba_recodage_a_chaque_venue: float = 0.5
     proba_rendu_non_differencie: float = 0.3
     proba_traitement_si_sjd: float = 0.6
     proba_traitement_si_secheresse: float = 0.3
@@ -280,6 +282,7 @@ class Tirages:
     u_dosage: float
     u_rendu_non_differencie: float
     u_codage_sjd: float
+    u_recodages: tuple[float, ...]
     u_traitement_sjd: float
     u_traitement_secheresse: float
     code_connectivite: str
@@ -301,6 +304,7 @@ def _tirer(scenario: Scenario, observation: random.Random, vocabulaire: Vocabula
         u_dosage=observation.random(),
         u_rendu_non_differencie=observation.random(),
         u_codage_sjd=observation.random(),
+        u_recodages=tuple(observation.random() for _ in range(maximum)),
         u_traitement_sjd=observation.random(),
         u_traitement_secheresse=observation.random(),
         code_connectivite=observation.choice(diagnostics.groupe("connectivites")),
@@ -451,7 +455,7 @@ def _diagnostics(
         tirages.u_codage_sjd < scenario.observation.proba_codage_si_sjd
     )
     if code_sjd_pose or recette.code_sjd_a_tort:
-        codes.append("M35.0")
+        codes.append(CODE_SJD)
     if recette.connectivite:
         codes.append(tirages.code_lupus if not recette.sjd else tirages.code_connectivite)
     if recette.lymphome:
@@ -464,17 +468,32 @@ def _diagnostics(
     lignes = []
     for rang, code in enumerate(codes, start=1):
         venue = _venue(tirages, venues, rang)
-        lignes.append(
-            {
-                "condition_occurrence_id": compteur.suivant("condition_occurrence"),
-                "person_id": person_id,
-                "condition_concept_id": diagnostics.concept(code),
-                "condition_start_date": venue["visit_start_date"],
-                "condition_source_value": code,
-                "visit_occurrence_id": venue["visit_occurrence_id"],
-            }
-        )
+        lignes.append(_diagnostic(person_id, code, diagnostics, venue, compteur))
+        if code != CODE_SJD:
+            continue
+        # Un patient suivi est recodé à ses venues suivantes : sans cela, la variante de
+        # Robustesse du Comparateur CIM-10 (deux occurrences) ne retiendrait personne.
+        for venue_suivante, u_recodage in zip(venues[1:], tirages.u_recodages, strict=False):
+            if u_recodage < scenario.observation.proba_recodage_a_chaque_venue:
+                lignes.append(_diagnostic(person_id, code, diagnostics, venue_suivante, compteur))
     return lignes
+
+
+def _diagnostic(
+    person_id: int,
+    code: str,
+    diagnostics: Table,
+    venue: Mapping[str, Any],
+    compteur: _Compteur,
+) -> dict[str, Any]:
+    return {
+        "condition_occurrence_id": compteur.suivant("condition_occurrence"),
+        "person_id": person_id,
+        "condition_concept_id": diagnostics.concept(code),
+        "condition_start_date": venue["visit_start_date"],
+        "condition_source_value": code,
+        "visit_occurrence_id": venue["visit_occurrence_id"],
+    }
 
 
 def _traitements(

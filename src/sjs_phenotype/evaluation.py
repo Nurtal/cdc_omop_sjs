@@ -6,13 +6,105 @@ permet de vérifier les chiffres sur de petites tables écrites à la main.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from sjs_phenotype.modele import Item, LignePhenotype, Niveau, Statut
 
 PROFIL_INCONNU = "profil inconnu"
+
+NIVEAUX_IDENTIFIES: tuple[Niveau, ...] = (Niveau.DEFINI, Niveau.PROBABLE)
+
+
+@dataclass(frozen=True)
+class Concordance:
+    """Accord entre le phénotype et le Comparateur CIM-10, sans référence (ADR-0004).
+
+    Kappa et Jaccard décrivent un recouvrement, pas une performance : aucun des deux
+    ensembles n'est un standard de référence. Ils valent None quand les deux repérages
+    sont vides — il n'y a alors rien à comparer.
+    """
+
+    les_deux: int
+    phenotype_seul: int
+    comparateur_seul: int
+    aucun_des_deux: int
+    kappa: float | None
+    jaccard: float | None
+    ids_phenotype_seul: tuple[int, ...]
+    ids_comparateur_seul: tuple[int, ...]
+
+    @property
+    def total(self) -> int:
+        return self.les_deux + self.phenotype_seul + self.comparateur_seul + self.aucun_des_deux
+
+    def en_json(self) -> dict[str, Any]:
+        return {
+            "les_deux": self.les_deux,
+            "phenotype_seul": self.phenotype_seul,
+            "comparateur_seul": self.comparateur_seul,
+            "aucun_des_deux": self.aucun_des_deux,
+            "kappa": self.kappa,
+            "jaccard": self.jaccard,
+            "ids_phenotype_seul": list(self.ids_phenotype_seul),
+            "ids_comparateur_seul": list(self.ids_comparateur_seul),
+        }
+
+
+def concordance(
+    table: Sequence[LignePhenotype],
+    comparateur: Collection[int],
+    niveaux: Sequence[Niveau] = NIVEAUX_IDENTIFIES,
+) -> Concordance:
+    """Confronte les patients identifiés et ceux du Comparateur CIM-10."""
+    retenus = set(niveaux)
+    codes = set(comparateur)
+    identifies = {ligne.person_id for ligne in table if ligne.niveau in retenus}
+    tous = {ligne.person_id for ligne in table}
+
+    les_deux = identifies & codes
+    phenotype_seul = identifies - codes
+    comparateur_seul = codes - identifies
+    aucun_des_deux = tous - identifies - codes
+
+    return Concordance(
+        les_deux=len(les_deux),
+        phenotype_seul=len(phenotype_seul),
+        comparateur_seul=len(comparateur_seul),
+        aucun_des_deux=len(aucun_des_deux),
+        kappa=_kappa(
+            len(les_deux), len(phenotype_seul), len(comparateur_seul), len(aucun_des_deux)
+        ),
+        jaccard=_jaccard(len(les_deux), len(identifies | codes)),
+        ids_phenotype_seul=tuple(sorted(phenotype_seul)),
+        ids_comparateur_seul=tuple(sorted(comparateur_seul)),
+    )
+
+
+def _jaccard(intersection: int, union: int) -> float | None:
+    return intersection / union if union else None
+
+
+def _kappa(
+    les_deux: int, phenotype_seul: int, comparateur_seul: int, ni_lun_ni_lautre: int
+) -> float | None:
+    """Kappa de Cohen sur le tableau 2×2.
+
+    Indéfini quand les deux repérages s'accordent parfaitement sur une seule catégorie :
+    l'accord attendu vaut alors 1 et le dénominateur s'annule.
+    """
+    total = les_deux + phenotype_seul + comparateur_seul + ni_lun_ni_lautre
+    if not total:
+        return None
+
+    observe = (les_deux + ni_lun_ni_lautre) / total
+    part_phenotype = (les_deux + phenotype_seul) / total
+    part_comparateur = (les_deux + comparateur_seul) / total
+    attendu = part_phenotype * part_comparateur + (1 - part_phenotype) * (1 - part_comparateur)
+    if attendu == 1:
+        return None
+    return (observe - attendu) / (1 - attendu)
 
 
 @dataclass(frozen=True)
@@ -111,3 +203,26 @@ def formater(effectifs: Effectifs) -> str:
             f"  {profil:<32} {nombre:>6}" for profil, nombre in sorted(effectifs.par_profil.items())
         ]
     return "\n".join(lignes)
+
+
+def formater_concordance(accord: Concordance, occurrences: int = 1) -> str:
+    """Rendu lisible : un tableau croisé, puis les deux indices d'accord."""
+    occurrence = "occurrence" if occurrences == 1 else "occurrences"
+    lignes = [
+        f"Concordance avec le Comparateur CIM-10 (M35.0, ≥ {occurrences} {occurrence})",
+        "",
+        f"{'':<22}{'codé':>10}{'non codé':>12}",
+        f"{'identifié':<22}{accord.les_deux:>10}{accord.phenotype_seul:>12}",
+        f"{'non identifié':<22}{accord.comparateur_seul:>10}{accord.aucun_des_deux:>12}",
+        "",
+        f"  kappa    {_indice(accord.kappa)}",
+        f"  Jaccard  {_indice(accord.jaccard)}",
+        "",
+        "  Aucun des deux repérages n'est une référence : ces indices décrivent un",
+        "  recouvrement, pas une performance.",
+    ]
+    return "\n".join(lignes)
+
+
+def _indice(valeur: float | None) -> str:
+    return "sans objet" if valeur is None else f"{valeur:.3f}"

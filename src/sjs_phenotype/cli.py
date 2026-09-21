@@ -13,8 +13,9 @@ from dataclasses import replace
 from pathlib import Path
 
 from sjs_phenotype import omop, phenotype
+from sjs_phenotype.comparateur import Comparateur, comparateur_cim10
 from sjs_phenotype.concepts import Vocabulaire
-from sjs_phenotype.evaluation import evaluer, formater
+from sjs_phenotype.evaluation import concordance, evaluer, formater, formater_concordance
 from sjs_phenotype.generator import Scenario, generer
 
 
@@ -41,6 +42,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     bilan = commandes.add_parser("evaluer", help="compter les patients par Niveau et par Statut")
     bilan.add_argument("--travail", type=Path, required=True)
+    bilan.add_argument(
+        "--occurrences-cim10",
+        type=int,
+        default=1,
+        help="occurrences distinctes de M35.0 pour entrer dans le Comparateur CIM-10",
+    )
 
     options = analyseur.parse_args(arguments)
 
@@ -76,8 +83,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        table = phenotype.lire(chemin)
         effectifs = evaluer(
-            phenotype.lire(chemin),
+            table,
             profils=_profils(options.travail),
             criteres_non_appliques=Vocabulaire.par_defaut().criteres_exclusion_non_appliques,
         )
@@ -85,6 +93,19 @@ def main(arguments: Sequence[str] | None = None) -> int:
             json.dumps(effectifs.en_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         print(formater(effectifs))
+
+        accord = concordance(
+            table,
+            comparateur_cim10(
+                options.travail / "omop",
+                Comparateur(occurrences_minimum=options.occurrences_cim10),
+            ),
+        )
+        (resultats / "concordance.json").write_text(
+            json.dumps(accord.en_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        print()
+        print(formater_concordance(accord, options.occurrences_cim10))
         return 0
 
     raise AssertionError(f"commande non gérée : {options.commande}")

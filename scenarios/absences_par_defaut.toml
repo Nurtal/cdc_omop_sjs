@@ -23,6 +23,7 @@ population_generale = 0.5
 proba_dosage_si_sjd = 0.9
 proba_dosage_si_temoin = 0.15
 proba_codage_si_sjd = 0.5
+proba_recodage_a_chaque_venue = 0.5
 proba_rendu_non_differencie = 0.3
 proba_traitement_si_sjd = 0.6
 proba_traitement_si_secheresse = 0.3
