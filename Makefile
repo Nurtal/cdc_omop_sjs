@@ -3,7 +3,7 @@ SCENARIO ?= scenarios/defaut.toml
 PATIENTS ?= 500
 GRAINE ?= 0
 
-.PHONY: all generate phenotype evaluate test lint typecheck check clean
+.PHONY: all generate phenotype evaluate manifest test lint typecheck check clean
 
 all: generate phenotype evaluate
 
@@ -29,3 +29,7 @@ check: lint typecheck test
 
 clean:
 	rm -rf $(TRAVAIL)
+
+# Le manifeste de la dernière exécution : versions, paramètres, empreintes.
+manifest: phenotype
+	@uv run python -c "import json,sys; m=json.load(open('$(TRAVAIL)/resultats/manifeste.json')); print(json.dumps(m, ensure_ascii=False, indent=2))"

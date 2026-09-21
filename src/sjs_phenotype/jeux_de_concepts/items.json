@@ -1,0 +1,50 @@
+{
+  "nom": "items",
+  "commentaire": "Concepts des Items ACR/EULAR issus du texte. Deux d'entre eux — focus score et Ocular Staining Score — n'ont aucun équivalent standard, ni LOINC ni SNOMED : ils gardent des identifiants locaux. Voir docs/vocabulaire-athena.md.",
+  "instantane_vocabulaire": {
+    "source": "LOINC 2.82 via tx.fhir.org ; SNOMED CT international ; concept_id OMOP via ATLAS demo (WebAPI 2.14.0, vocabulaire ~2024-09)",
+    "date": "2026-09-21",
+    "a_verifier": false,
+    "note": "Le débit salivaire relève du domaine Observation en OMOP, non Measurement : décision de modélisation à prendre en #10."
+  },
+  "codes": {
+    "focus_score": {
+      "concept_id": 2000005000,
+      "libelle": "Focus score de biopsie de glande salivaire accessoire (foyers / 4 mm²)"
+    },
+    "oss": {
+      "concept_id": 2000005001,
+      "libelle": "Ocular Staining Score"
+    },
+    "schirmer_droit": {
+      "concept_id": 3025758,
+      "libelle": "LOINC 29003-1 — Right eye Tear secretion 1 Schirmer test (mm)"
+    },
+    "schirmer_gauche": {
+      "concept_id": 3025415,
+      "libelle": "LOINC 29004-9 — Left eye Tear secretion 1 Schirmer test (mm)"
+    },
+    "schirmer": {
+      "concept_id": 4287641,
+      "libelle": "SNOMED 397547000 — Schirmer I test (non latéralisé)"
+    },
+    "debit_salivaire": {
+      "concept_id": 4088662,
+      "libelle": "SNOMED 251339001 — Whole saliva flow rate (domaine Observation)"
+    }
+  },
+  "groupes": {
+    "schirmer": [
+      "schirmer",
+      "schirmer_droit",
+      "schirmer_gauche"
+    ],
+    "sans_concept_standard": [
+      "focus_score",
+      "oss"
+    ],
+    "sans_qualificatif_exact": [
+      "debit_salivaire"
+    ]
+  }
+}

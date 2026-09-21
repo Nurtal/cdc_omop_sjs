@@ -3,8 +3,6 @@
   "commentaire": "Codes CIM-10 mobilisés par le projet : SjD (Comparateur CIM-10), connectivites associées, lymphomes, Critères d'exclusion, sécheresse non spécifique. Le code de SjD n'entre jamais dans la Définition computable. Deux Critères d'exclusion ACR/EULAR n'ont pas de code CIM-10 OMS spécifique : ils ne sont pas appliqués, et les sorties le disent.",
   "instantane_vocabulaire": {
     "source": "provisoire",
-    "date": null,
-    "empreinte": null,
     "a_verifier": true,
     "note": "Identifiants locaux (>= 2 000 000 000) en attendant la vérification Athena."
   },

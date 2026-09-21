@@ -1,16 +1,38 @@
 {
   "nom": "anti_ssa",
-  "commentaire": "Jeu de concepts de l'Item Anti-SSA. Un anti-Ro52 isolé n'est pas un Anti-SSA : ses concepts sont listés pour être reconnus, jamais comptés comme preuve.",
+  "commentaire": "Jeu de concepts de l'Item Anti-SSA. Un anti-Ro52 isolé n'est pas un Anti-SSA : ses concepts sont listés pour être reconnus, jamais comptés comme preuve. LOINC écrit « 52kD » et « 60kD », jamais « Ro52 » ni « Ro60 ».",
   "instantane_vocabulaire": {
-    "source": "provisoire",
-    "date": null,
-    "empreinte": null,
-    "a_verifier": true,
-    "note": "Identifiants locaux (>= 2 000 000 000) en attendant la vérification Athena — voir le ticket « Manifeste et instantané de vocabulaire »."
+    "source": "LOINC 2.82 via tx.fhir.org ; concept_id OMOP via ATLAS demo (WebAPI 2.14.0, vocabulaire ~2024-09)",
+    "date": "2026-09-21",
+    "a_verifier": false,
+    "note": "Voir docs/vocabulaire-athena.md. Les valeurs de résultat restent locales : non vérifiées."
   },
-  "anti_ro60": [2000000001],
-  "anti_ro52": [2000000002],
-  "anti_ssa_non_differencie": [2000000003],
+  "anti_ro60": [
+    3040499,
+    3041423
+  ],
+  "anti_ro52": [
+    3039348,
+    3041067
+  ],
+  "anti_ssa_non_differencie": [
+    3015154,
+    3023939
+  ],
+  "anti_ssb": [
+    3008914,
+    3027450
+  ],
   "valeur_positive": 2000000010,
-  "valeur_negative": 2000000011
+  "valeur_negative": 2000000011,
+  "libelles": {
+    "3040499": "LOINC 53018-8 — Sjogrens syndrome-A extractable nuclear 60kD Ab [Presence] in Serum",
+    "3041423": "LOINC 53019-6 — Sjogrens syndrome-A extractable nuclear 60kD Ab [Units/volume] in Serum",
+    "3039348": "LOINC 53016-2 — Sjogrens syndrome-A extractable nuclear 52kD Ab [Presence] in Serum",
+    "3041067": "LOINC 53017-0 — Sjogrens syndrome-A extractable nuclear 52kD Ab [Units/volume] in Serum",
+    "3015154": "LOINC 8093-7 — Sjogrens syndrome-A extractable nuclear Ab [Presence] in Serum",
+    "3023939": "LOINC 17792-3 — Sjogrens syndrome-A extractable nuclear Ab [Units/volume] in Serum",
+    "3008914": "LOINC 8094-5 — Sjogrens syndrome-B extractable nuclear Ab [Presence] in Serum",
+    "3027450": "LOINC 17791-5 — Sjogrens syndrome-B extractable nuclear Ab [Units/volume] in Serum"
+  }
 }

@@ -10,6 +10,7 @@ import json
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import date
 from pathlib import Path
 
 from sjs_phenotype import omop, phenotype
@@ -25,6 +26,7 @@ from sjs_phenotype.evaluation import (
     performances,
 )
 from sjs_phenotype.generator import Scenario, generer
+from sjs_phenotype.manifeste import Manifeste
 from sjs_phenotype.modele import Niveau
 
 
@@ -94,7 +96,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
             options.travail / "omop", phenotype.Parametres(absences=absences)
         )
         chemin = phenotype.ecrire(table, resultats)
+        manifeste = Manifeste.produire(
+            options.travail,
+            scenario=_scenario_du_travail(options.travail),
+            absences=absences,
+        )
+        manifeste.ecrire(resultats / "manifeste.json")
         print(f"Table phénotype : {chemin} ({len(table)} patients)")
+        print(f"Manifeste : {resultats / 'manifeste.json'}")
         return 0
 
     if options.commande == "evaluer":
@@ -169,6 +178,31 @@ def _entier_positif(valeur: str) -> int:
     if nombre < 1:
         raise argparse.ArgumentTypeError("doit valoir au moins 1")
     return nombre
+
+
+def _scenario_du_travail(travail: Path) -> dict[str, object]:
+    """Tous les paramètres qui ont produit le jeu, sans en omettre aucun.
+
+    Un bloc partiel laisserait croire que deux exécutions ont suivi le même scénario alors
+    qu'un réglage absent les sépare.
+    """
+    chemin = travail / "scenario.toml"
+    if not chemin.exists():
+        return {}
+    scenario = Scenario.charger(chemin)
+    champs: dict[str, object] = {}
+    for nom, valeur in vars(scenario).items():
+        if nom == "parts":
+            champs[nom] = {str(profil): part for profil, part in scenario.parts.items()}
+        elif nom == "observation":
+            champs[nom] = dict(vars(scenario.observation))
+        elif isinstance(valeur, date):
+            champs[nom] = valeur.isoformat()
+        elif isinstance(valeur, omop.Absences):
+            champs[nom] = valeur.value
+        else:
+            champs[nom] = valeur
+    return champs
 
 
 def _absences_du_scenario(travail: Path) -> omop.Absences:

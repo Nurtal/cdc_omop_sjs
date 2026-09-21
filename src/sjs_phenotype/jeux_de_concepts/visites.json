@@ -6,7 +6,13 @@
     "a_verifier": false
   },
   "codes": {
-    "externe": { "concept_id": 9202, "libelle": "Outpatient Visit" },
-    "hospitalisation": { "concept_id": 9201, "libelle": "Inpatient Visit" }
+    "externe": {
+      "concept_id": 9202,
+      "libelle": "Outpatient Visit"
+    },
+    "hospitalisation": {
+      "concept_id": 9201,
+      "libelle": "Inpatient Visit"
+    }
   }
 }
