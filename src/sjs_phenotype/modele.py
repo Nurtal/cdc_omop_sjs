@@ -65,6 +65,12 @@ class LignePhenotype:
     score_atteignable: int
     niveau: Niveau
     dates_atteinte: Mapping[Niveau, date]
+    criteres_exclusion: tuple[str, ...] = ()
+
+    @property
+    def exclu(self) -> bool:
+        """Un patient exclu garde son Niveau : il est signalé, pas retiré."""
+        return bool(self.criteres_exclusion)
 
     def __eq__(self, autre: object) -> bool:
         if not isinstance(autre, LignePhenotype):
@@ -76,6 +82,7 @@ class LignePhenotype:
             and self.score_atteignable == autre.score_atteignable
             and self.niveau == autre.niveau
             and dict(self.dates_atteinte) == dict(autre.dates_atteinte)
+            and self.criteres_exclusion == autre.criteres_exclusion
         )
 
     def __hash__(self) -> int:

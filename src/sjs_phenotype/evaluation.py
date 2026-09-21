@@ -21,13 +21,21 @@ class Effectifs:
 
     total: int
     par_niveau: Mapping[Niveau, int]
+    par_niveau_hors_exclus: Mapping[Niveau, int]
+    exclus: int
     par_statut: Mapping[Item, Mapping[Statut, int]]
     par_profil: Mapping[str, int]
+    criteres_non_appliques: tuple[str, ...] = ()
 
     def en_json(self) -> dict[str, Any]:
         return {
             "total": self.total,
             "par_niveau": {str(niveau): nombre for niveau, nombre in self.par_niveau.items()},
+            "par_niveau_hors_exclus": {
+                str(niveau): nombre for niveau, nombre in self.par_niveau_hors_exclus.items()
+            },
+            "exclus": self.exclus,
+            "criteres_non_appliques": list(self.criteres_non_appliques),
             "par_statut": {
                 str(item): {str(statut): nombre for statut, nombre in statuts.items()}
                 for item, statuts in self.par_statut.items()
@@ -36,13 +44,28 @@ class Effectifs:
         }
 
 
-def evaluer(table: Sequence[LignePhenotype], profils: Mapping[int, str] | None = None) -> Effectifs:
-    """Compte les patients. `profils` vient de l'État réel, connu du seul jeu synthétique."""
+def evaluer(
+    table: Sequence[LignePhenotype],
+    profils: Mapping[int, str] | None = None,
+    criteres_non_appliques: Sequence[str] = (),
+) -> Effectifs:
+    """Compte les patients. `profils` vient de l'État réel, connu du seul jeu synthétique.
+
+    Les patients Exclus sont comptés deux fois : dans `par_niveau`, qui décrit ce que la
+    Définition computable trouve, et à part dans `par_niveau_hors_exclus`, qui décrit ce
+    qu'il en reste une fois les Critères d'exclusion appliqués.
+    """
     par_niveau = {niveau: 0 for niveau in Niveau}
+    par_niveau_hors_exclus = {niveau: 0 for niveau in Niveau}
+    exclus = 0
     par_statut = {item: {statut: 0 for statut in Statut} for item in Item}
     par_profil: dict[str, int] = {}
     for ligne in table:
         par_niveau[ligne.niveau] += 1
+        if ligne.exclu:
+            exclus += 1
+        else:
+            par_niveau_hors_exclus[ligne.niveau] += 1
         for item, statut in ligne.statuts.items():
             par_statut[item][statut] += 1
         if profils is not None:
@@ -53,8 +76,11 @@ def evaluer(table: Sequence[LignePhenotype], profils: Mapping[int, str] | None =
     return Effectifs(
         total=len(table),
         par_niveau=par_niveau,
+        par_niveau_hors_exclus=par_niveau_hors_exclus,
+        exclus=exclus,
         par_statut=par_statut,
         par_profil=par_profil,
+        criteres_non_appliques=tuple(criteres_non_appliques),
     )
 
 
@@ -62,6 +88,19 @@ def formater(effectifs: Effectifs) -> str:
     """Rendu lisible en terminal, dans le vocabulaire du glossaire."""
     lignes = [f"Patients : {effectifs.total}", "", "Niveau de certitude"]
     lignes += [f"  {niveau:<14} {nombre:>6}" for niveau, nombre in effectifs.par_niveau.items()]
+    if effectifs.exclus:
+        lignes += ["", f"Exclus (Critère d'exclusion ACR/EULAR) : {effectifs.exclus}"]
+        lignes += [
+            f"  hors exclus : {niveau} {nombre}"
+            for niveau, nombre in effectifs.par_niveau_hors_exclus.items()
+            if niveau is not Niveau.AUCUN
+        ]
+    if effectifs.criteres_non_appliques:
+        lignes += [
+            "",
+            "Critères d'exclusion non appliqués (aucun code CIM-10 OMS spécifique) : "
+            + ", ".join(effectifs.criteres_non_appliques),
+        ]
     lignes += ["", "Statut par Item ACR/EULAR"]
     for item, statuts in effectifs.par_statut.items():
         detail = "  ".join(f"{statut} {nombre}" for statut, nombre in statuts.items())

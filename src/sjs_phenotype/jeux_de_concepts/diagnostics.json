@@ -1,6 +1,6 @@
 {
   "nom": "diagnostics",
-  "commentaire": "Codes CIM-10 mobilisés par le projet : SjD (Comparateur CIM-10), connectivites associées, lymphomes, Critères d'exclusion, sécheresse non spécifique. Le code de SjD n'entre jamais dans la Définition computable.",
+  "commentaire": "Codes CIM-10 mobilisés par le projet : SjD (Comparateur CIM-10), connectivites associées, lymphomes, Critères d'exclusion, sécheresse non spécifique. Le code de SjD n'entre jamais dans la Définition computable. Deux Critères d'exclusion ACR/EULAR n'ont pas de code CIM-10 OMS spécifique : ils ne sont pas appliqués, et les sorties le disent.",
   "instantane_vocabulaire": {
     "source": "provisoire",
     "date": null,
@@ -79,6 +79,12 @@
     "lupus_ou_myosite": [
       "M32",
       "M33"
+    ]
+  },
+  "listes": {
+    "criteres_exclusion_non_appliques": [
+      "radiothérapie cervico-faciale",
+      "maladie à IgG4"
     ]
   }
 }

@@ -88,6 +88,8 @@ SCHEMAS: Mapping[str, Mapping[str, str]] = {
         "connectivite": "BOOLEAN",
         "lymphome": "BOOLEAN",
         "exclusion": "BOOLEAN",
+        "critere_exclusion": "VARCHAR",
+        "vhc_actif": "BOOLEAN",
     },
     "phenotype": {
         "person_id": "BIGINT",
@@ -101,6 +103,8 @@ SCHEMAS: Mapping[str, Mapping[str, str]] = {
         "niveau": "VARCHAR",
         "date_probable": "DATE",
         "date_defini": "DATE",
+        "exclu": "BOOLEAN",
+        "criteres_exclusion": "VARCHAR",
     },
 }
 
