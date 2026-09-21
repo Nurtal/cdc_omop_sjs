@@ -34,6 +34,9 @@ class Concordance:
     jaccard: float | None
     ids_phenotype_seul: tuple[int, ...]
     ids_comparateur_seul: tuple[int, ...]
+    niveaux: tuple[Niveau, ...]
+    exclus_retires: bool
+    occurrences_minimum: int
 
     @property
     def total(self) -> int:
@@ -49,6 +52,9 @@ class Concordance:
             "jaccard": self.jaccard,
             "ids_phenotype_seul": list(self.ids_phenotype_seul),
             "ids_comparateur_seul": list(self.ids_comparateur_seul),
+            "niveaux_retenus": [str(niveau) for niveau in self.niveaux],
+            "exclus_retires": self.exclus_retires,
+            "occurrences_minimum_cim10": self.occurrences_minimum,
         }
 
 
@@ -56,11 +62,22 @@ def concordance(
     table: Sequence[LignePhenotype],
     comparateur: Collection[int],
     niveaux: Sequence[Niveau] = NIVEAUX_IDENTIFIES,
+    exclus_retires: bool = True,
+    occurrences_minimum: int = 1,
 ) -> Concordance:
-    """Confronte les patients identifiés et ceux du Comparateur CIM-10."""
+    """Confronte les patients identifiés et ceux du Comparateur CIM-10.
+
+    Par défaut les Exclus ne comptent pas parmi les identifiés : un Critère d'exclusion
+    ACR/EULAR écarte le patient, et l'effectif doit être celui de `par_niveau_hors_exclus`,
+    imprimé juste au-dessus. `exclus_retires=False` donne l'autre lecture.
+    """
     retenus = set(niveaux)
     codes = set(comparateur)
-    identifies = {ligne.person_id for ligne in table if ligne.niveau in retenus}
+    identifies = {
+        ligne.person_id
+        for ligne in table
+        if ligne.niveau in retenus and not (exclus_retires and ligne.exclu)
+    }
     tous = {ligne.person_id for ligne in table}
 
     les_deux = identifies & codes
@@ -79,6 +96,9 @@ def concordance(
         jaccard=_jaccard(len(les_deux), len(identifies | codes)),
         ids_phenotype_seul=tuple(sorted(phenotype_seul)),
         ids_comparateur_seul=tuple(sorted(comparateur_seul)),
+        niveaux=tuple(niveaux),
+        exclus_retires=exclus_retires,
+        occurrences_minimum=occurrences_minimum,
     )
 
 
@@ -205,11 +225,15 @@ def formater(effectifs: Effectifs) -> str:
     return "\n".join(lignes)
 
 
-def formater_concordance(accord: Concordance, occurrences: int = 1) -> str:
+def formater_concordance(accord: Concordance) -> str:
     """Rendu lisible : un tableau croisé, puis les deux indices d'accord."""
+    occurrences = accord.occurrences_minimum
     occurrence = "occurrence" if occurrences == 1 else "occurrences"
+    niveaux = ", ".join(str(niveau) for niveau in accord.niveaux)
+    sort = "hors Exclus" if accord.exclus_retires else "Exclus compris"
     lignes = [
         f"Concordance avec le Comparateur CIM-10 (M35.0, ≥ {occurrences} {occurrence})",
+        f"  identifié = {niveaux} ({sort})",
         "",
         f"{'':<22}{'codé':>10}{'non codé':>12}",
         f"{'identifié':<22}{accord.les_deux:>10}{accord.phenotype_seul:>12}",

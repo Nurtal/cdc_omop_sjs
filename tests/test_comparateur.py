@@ -143,3 +143,21 @@ def test_sans_recodage_le_seuil_a_deux_ne_retient_personne(tmp_path: Path) -> No
 
     assert comparateur_cim10(chemins.omop)
     assert comparateur_cim10(chemins.omop, Comparateur(occurrences_minimum=2)) == set()
+
+
+def test_le_recodage_najoute_pas_de_ligne_en_double(tmp_path: Path) -> None:
+    """Une ligne identique sur la même venue n'apporte aucune date distincte."""
+    scenario = Scenario(
+        n_patients=300,
+        graine=8,
+        observation=Observation(proba_codage_si_sjd=1.0, proba_recodage_a_chaque_venue=1.0),
+    )
+    chemins = generer(scenario, tmp_path)
+
+    diagnostics = omop.lire(chemins.omop / "condition_occurrence.parquet")
+    empreintes = [
+        (ligne["person_id"], ligne["condition_concept_id"], ligne["visit_occurrence_id"])
+        for ligne in diagnostics
+    ]
+
+    assert len(empreintes) == len(set(empreintes))

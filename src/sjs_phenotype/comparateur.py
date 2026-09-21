@@ -11,9 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sjs_phenotype import omop
-from sjs_phenotype.concepts import Vocabulaire
-
-CODE_SJD = "M35.0"
+from sjs_phenotype.concepts import CODE_SJD, Vocabulaire
 
 _REQUETE = """
 SELECT person_id

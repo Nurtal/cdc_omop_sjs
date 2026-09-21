@@ -14,7 +14,7 @@ from sjs_phenotype.evaluation import concordance
 from sjs_phenotype.modele import Item, LignePhenotype, Niveau, Statut
 
 
-def _ligne(person_id: int, niveau: Niveau) -> LignePhenotype:
+def _ligne(person_id: int, niveau: Niveau, *, exclu: bool = False) -> LignePhenotype:
     statuts = {item: Statut.NON_DOCUMENTE for item in Item}
     if niveau is not Niveau.AUCUN:
         statuts[Item.ANTI_SSA] = Statut.POSITIF
@@ -26,6 +26,7 @@ def _ligne(person_id: int, niveau: Niveau) -> LignePhenotype:
         score_atteignable=9,
         niveau=niveau,
         dates_atteinte={niveau: date(2020, 1, 1)} if niveau is not Niveau.AUCUN else {},
+        criteres_exclusion=("D86",) if exclu else (),
     )
 
 
@@ -114,3 +115,36 @@ def test_les_discordants_sont_nommes() -> None:
 
     assert resultat.ids_phenotype_seul == (1,)
     assert resultat.ids_comparateur_seul == (2,)
+
+
+def test_un_exclu_ne_compte_pas_parmi_les_identifies() -> None:
+    """Un Critère d'exclusion ACR/EULAR écarte le patient : il n'est pas un cas."""
+    table = [_ligne(1, Niveau.PROBABLE), _ligne(2, Niveau.PROBABLE, exclu=True)]
+
+    resultat = concordance(table, comparateur={1, 2})
+
+    assert resultat.les_deux == 1
+    assert resultat.comparateur_seul == 1
+
+
+def test_les_exclus_peuvent_etre_comptes_a_la_demande() -> None:
+    table = [_ligne(1, Niveau.PROBABLE), _ligne(2, Niveau.PROBABLE, exclu=True)]
+
+    resultat = concordance(table, comparateur={1, 2}, exclus_retires=False)
+
+    assert resultat.les_deux == 2
+
+
+def test_les_parametres_sont_traces_dans_le_json() -> None:
+    """Deux exécutions ne diffèrent parfois que par leurs paramètres : ils doivent rester."""
+    resultat = concordance(
+        _table(Niveau.DEFINI),
+        comparateur={1},
+        niveaux=(Niveau.DEFINI,),
+        occurrences_minimum=2,
+    )
+
+    trace = resultat.en_json()
+    assert trace["niveaux_retenus"] == ["défini"]
+    assert trace["occurrences_minimum_cim10"] == 2
+    assert trace["exclus_retires"] is True

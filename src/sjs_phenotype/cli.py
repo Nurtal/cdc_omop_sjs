@@ -15,8 +15,15 @@ from pathlib import Path
 from sjs_phenotype import omop, phenotype
 from sjs_phenotype.comparateur import Comparateur, comparateur_cim10
 from sjs_phenotype.concepts import Vocabulaire
-from sjs_phenotype.evaluation import concordance, evaluer, formater, formater_concordance
+from sjs_phenotype.evaluation import (
+    NIVEAUX_IDENTIFIES,
+    concordance,
+    evaluer,
+    formater,
+    formater_concordance,
+)
 from sjs_phenotype.generator import Scenario, generer
+from sjs_phenotype.modele import Niveau
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
@@ -44,9 +51,22 @@ def main(arguments: Sequence[str] | None = None) -> int:
     bilan.add_argument("--travail", type=Path, required=True)
     bilan.add_argument(
         "--occurrences-cim10",
-        type=int,
+        type=_entier_positif,
         default=1,
         help="occurrences distinctes de M35.0 pour entrer dans le Comparateur CIM-10",
+    )
+    bilan.add_argument(
+        "--niveaux",
+        nargs="+",
+        type=Niveau,
+        choices=[Niveau.DEFINI, Niveau.PROBABLE],
+        default=list(NIVEAUX_IDENTIFIES),
+        help="Niveaux comptés comme identifiés (défaut : défini et probable)",
+    )
+    bilan.add_argument(
+        "--avec-exclus",
+        action="store_true",
+        help="compter aussi les Exclus parmi les identifiés",
     )
 
     options = analyseur.parse_args(arguments)
@@ -94,21 +114,42 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
         print(formater(effectifs))
 
+        dossier_omop = options.travail / "omop"
+        if not dossier_omop.exists():
+            print(
+                f"Dossier OMOP introuvable : {dossier_omop}. "
+                "La Concordance avec le Comparateur CIM-10 n'est pas calculable.",
+                file=sys.stderr,
+            )
+            return 1
+
         accord = concordance(
             table,
             comparateur_cim10(
-                options.travail / "omop",
-                Comparateur(occurrences_minimum=options.occurrences_cim10),
+                dossier_omop, Comparateur(occurrences_minimum=options.occurrences_cim10)
             ),
+            niveaux=options.niveaux,
+            exclus_retires=not options.avec_exclus,
+            occurrences_minimum=options.occurrences_cim10,
         )
-        (resultats / "concordance.json").write_text(
+        nom = f"concordance-{'-'.join(n.name.lower() for n in options.niveaux)}"
+        nom += f"-cim10x{options.occurrences_cim10}"
+        (resultats / f"{nom}.json").write_text(
             json.dumps(accord.en_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         print()
-        print(formater_concordance(accord, options.occurrences_cim10))
+        print(formater_concordance(accord))
         return 0
 
     raise AssertionError(f"commande non gérée : {options.commande}")
+
+
+def _entier_positif(valeur: str) -> int:
+    """Argparse rejette un seuil invalide avant qu'un seul résultat ne soit écrit."""
+    nombre = int(valeur)
+    if nombre < 1:
+        raise argparse.ArgumentTypeError("doit valoir au moins 1")
+    return nombre
 
 
 def _absences_du_scenario(travail: Path) -> omop.Absences:

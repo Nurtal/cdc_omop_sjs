@@ -58,3 +58,42 @@ def test_letat_reel_est_ecrit_hors_du_schema_omop(tmp_path: Path) -> None:
     tables_omop = {chemin.name for chemin in (travail / "omop").glob("*.parquet")}
 
     assert "etat_reel.parquet" not in tables_omop
+
+
+def test_evaluer_sans_dossier_omop_refuse_de_calculer_la_concordance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Un comparateur vide faute de données ressemblerait à un comparateur qui ne trouve rien."""
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "20"])
+    main(["phenotyper", "--travail", str(travail)])
+    for chemin in sorted((travail / "omop").iterdir()):
+        chemin.unlink()
+    (travail / "omop").rmdir()
+
+    code = main(["evaluer", "--travail", str(travail)])
+
+    assert code != 0
+    assert "Concordance" in capsys.readouterr().err
+
+
+def test_un_seuil_invalide_est_refuse_avant_tout_resultat(tmp_path: Path) -> None:
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "20"])
+    main(["phenotyper", "--travail", str(travail)])
+
+    with pytest.raises(SystemExit):
+        main(["evaluer", "--travail", str(travail), "--occurrences-cim10", "0"])
+
+
+def test_les_resultats_de_concordance_ne_secrasent_pas(tmp_path: Path) -> None:
+    travail = tmp_path / "travail"
+    main(["generer", "--sortie", str(travail), "--patients", "60"])
+    main(["phenotyper", "--travail", str(travail)])
+
+    main(["evaluer", "--travail", str(travail)])
+    main(["evaluer", "--travail", str(travail), "--occurrences-cim10", "2"])
+    main(["evaluer", "--travail", str(travail), "--niveaux", "défini"])
+
+    produits = sorted(p.name for p in (travail / "resultats").glob("concordance-*.json"))
+    assert len(produits) == 3

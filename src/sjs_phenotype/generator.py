@@ -23,8 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from sjs_phenotype import omop
-from sjs_phenotype.comparateur import CODE_SJD
-from sjs_phenotype.concepts import Table, Vocabulaire
+from sjs_phenotype.concepts import CODE_SJD, Table, Vocabulaire
 
 CODE_VHC = "B18.2"
 
@@ -471,9 +470,12 @@ def _diagnostics(
         lignes.append(_diagnostic(person_id, code, diagnostics, venue, compteur))
         if code != CODE_SJD:
             continue
-        # Un patient suivi est recodé à ses venues suivantes : sans cela, la variante de
-        # Robustesse du Comparateur CIM-10 (deux occurrences) ne retiendrait personne.
-        for venue_suivante, u_recodage in zip(venues[1:], tirages.u_recodages, strict=False):
+        # Un patient suivi est recodé à ses venues *suivantes* : sans cela, la variante de
+        # Robustesse du Comparateur CIM-10 (deux occurrences) ne retiendrait personne. Le
+        # recodage part de la venue qui porte déjà le code, sinon il la redouble sans
+        # ajouter la moindre date distincte.
+        depart = venues.index(venue) + 1
+        for venue_suivante, u_recodage in zip(venues[depart:], tirages.u_recodages, strict=False):
             if u_recodage < scenario.observation.proba_recodage_a_chaque_venue:
                 lignes.append(_diagnostic(person_id, code, diagnostics, venue_suivante, compteur))
     return lignes

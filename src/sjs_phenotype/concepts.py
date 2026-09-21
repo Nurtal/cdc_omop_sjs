@@ -89,6 +89,9 @@ class Table:
         )
 
 
+CODE_SJD = "M35.0"
+
+
 @dataclass(frozen=True)
 class Vocabulaire:
     """Tous les jeux de concepts du projet, chargés d'un coup."""
