@@ -1,0 +1,25 @@
+{
+  "nom": "notes",
+  "commentaire": "Classes de comptes rendus et acte de biopsie de glande salivaire accessoire. L'acte dit qu'une biopsie a eu lieu, même quand son compte rendu manque : c'est lui qui distinguera « biopsie non faite » de « compte rendu introuvable ».",
+  "instantane_vocabulaire": {
+    "source": "provisoire",
+    "date": null,
+    "empreinte": null,
+    "a_verifier": true,
+    "note": "Identifiants locaux (>= 2 000 000 000) en attendant la vérification Athena."
+  },
+  "codes": {
+    "anatomopathologie": {
+      "concept_id": 2000004000,
+      "libelle": "Compte rendu d'anatomopathologie"
+    },
+    "courrier": {
+      "concept_id": 2000004001,
+      "libelle": "Courrier de consultation"
+    },
+    "biopsie_glande_salivaire": {
+      "concept_id": 2000004010,
+      "libelle": "Biopsie de glande salivaire accessoire (CCAM HAHB001)"
+    }
+  }
+}
