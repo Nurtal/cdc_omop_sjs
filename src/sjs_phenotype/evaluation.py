@@ -102,6 +102,98 @@ def concordance(
     )
 
 
+@dataclass(frozen=True)
+class Performances:
+    """Ce que vaut la Définition computable face à un État réel connu.
+
+    N'existe que sur le jeu synthétique : sur l'EDS aucun standard de référence n'est
+    constitué (ADR-0004). Ces chiffres ne valent que sous les hypothèses du Processus
+    d'observation qui a produit le jeu (ADR-0001) — un recueil plus lâche les abaisse
+    sans que la Définition computable ait changé.
+    """
+
+    vrais_positifs: int
+    faux_positifs: int
+    faux_negatifs: int
+    vrais_negatifs: int
+    ignores: int
+    niveaux: tuple[Niveau, ...]
+    exclus_retires: bool
+
+    @property
+    def total(self) -> int:
+        return self.vrais_positifs + self.faux_positifs + self.faux_negatifs + self.vrais_negatifs
+
+    @property
+    def sensibilite(self) -> float | None:
+        """Part des malades que la définition retrouve."""
+        return _ratio(self.vrais_positifs, self.vrais_positifs + self.faux_negatifs)
+
+    @property
+    def vpp(self) -> float | None:
+        """Part des patients identifiés qui sont réellement malades."""
+        return _ratio(self.vrais_positifs, self.vrais_positifs + self.faux_positifs)
+
+    @property
+    def specificite(self) -> float | None:
+        return _ratio(self.vrais_negatifs, self.vrais_negatifs + self.faux_positifs)
+
+    def en_json(self) -> dict[str, Any]:
+        return {
+            "total": self.total,
+            "ignores": self.ignores,
+            "vrais_positifs": self.vrais_positifs,
+            "faux_positifs": self.faux_positifs,
+            "faux_negatifs": self.faux_negatifs,
+            "vrais_negatifs": self.vrais_negatifs,
+            "sensibilite": self.sensibilite,
+            "vpp": self.vpp,
+            "specificite": self.specificite,
+            "niveaux_retenus": [str(niveau) for niveau in self.niveaux],
+            "exclus_retires": self.exclus_retires,
+            "avertissement": (
+                "Valables sous les seules hypothèses du Processus d'observation du "
+                "scénario. Rien d'équivalent n'est mesurable sur l'EDS, faute de référence."
+            ),
+        }
+
+
+def performances(
+    table: Sequence[LignePhenotype],
+    etat_reel: Mapping[int, bool],
+    niveaux: Sequence[Niveau] = NIVEAUX_IDENTIFIES,
+    exclus_retires: bool = True,
+) -> Performances:
+    """Confronte la table phénotype à l'État réel du jeu synthétique.
+
+    Les patients absents de l'État réel sont ignorés : un jeu dépareillé doit se voir dans
+    les effectifs, pas faire tomber le calcul.
+    """
+    retenus = set(niveaux)
+    compte = {(True, True): 0, (True, False): 0, (False, True): 0, (False, False): 0}
+    ignores = 0
+    for ligne in table:
+        if ligne.person_id not in etat_reel:
+            ignores += 1
+            continue
+        identifie = ligne.niveau in retenus and not (exclus_retires and ligne.exclu)
+        compte[(identifie, etat_reel[ligne.person_id])] += 1
+
+    return Performances(
+        vrais_positifs=compte[(True, True)],
+        faux_positifs=compte[(True, False)],
+        faux_negatifs=compte[(False, True)],
+        vrais_negatifs=compte[(False, False)],
+        ignores=ignores,
+        niveaux=tuple(niveaux),
+        exclus_retires=exclus_retires,
+    )
+
+
+def _ratio(numerateur: int, denominateur: int) -> float | None:
+    return numerateur / denominateur if denominateur else None
+
+
 def _jaccard(intersection: int, union: int) -> float | None:
     return intersection / union if union else None
 
@@ -250,3 +342,31 @@ def formater_concordance(accord: Concordance) -> str:
 
 def _indice(valeur: float | None) -> str:
     return "sans objet" if valeur is None else f"{valeur:.3f}"
+
+
+def formater_performances(resultat: Performances) -> str:
+    """Rendu lisible, avec l'avertissement qui doit accompagner ces chiffres."""
+    niveaux = ", ".join(str(niveau) for niveau in resultat.niveaux)
+    sort = "hors Exclus" if resultat.exclus_retires else "Exclus compris"
+    lignes = [
+        "Performances face à l'État réel (jeu synthétique uniquement)",
+        f"  identifié = {niveaux} ({sort})",
+        "",
+        f"{'':<22}{'SjD':>10}{'témoin':>12}",
+        f"{'identifié':<22}{resultat.vrais_positifs:>10}{resultat.faux_positifs:>12}",
+        f"{'non identifié':<22}{resultat.faux_negatifs:>10}{resultat.vrais_negatifs:>12}",
+        "",
+        f"  sensibilité  {_indice(resultat.sensibilite)}",
+        f"  VPP          {_indice(resultat.vpp)}",
+        f"  spécificité  {_indice(resultat.specificite)}",
+        "",
+        *(
+            [f"  {resultat.ignores} patients absents de l'État réel, non comptés."]
+            if resultat.ignores
+            else []
+        ),
+        "  Ces chiffres ne valent que sous les hypothèses du Processus d'observation du",
+        "  scénario : un recueil plus lâche les abaisse sans que la définition ait changé.",
+        "  Rien d'équivalent ne sera mesurable sur l'EDS, faute de référence.",
+    ]
+    return "\n".join(lignes)
