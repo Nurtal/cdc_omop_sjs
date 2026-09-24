@@ -20,6 +20,7 @@ class JeuDeConcepts:
     anti_ro60: tuple[int, ...]
     anti_ro52: tuple[int, ...]
     anti_ssa_non_differencie: tuple[int, ...]
+    anti_ssb: tuple[int, ...]
     valeur_positive: int
     valeur_negative: int
 
@@ -43,6 +44,7 @@ class JeuDeConcepts:
             anti_ro60=tuple(contenu["anti_ro60"]),
             anti_ro52=tuple(contenu["anti_ro52"]),
             anti_ssa_non_differencie=tuple(contenu["anti_ssa_non_differencie"]),
+            anti_ssb=tuple(contenu["anti_ssb"]),
             valeur_positive=int(contenu["valeur_positive"]),
             valeur_negative=int(contenu["valeur_negative"]),
         )
@@ -91,6 +93,10 @@ class Table:
 
 CODE_SJD = "M35.0"
 
+# Au-delà de ce seuil, un concept est propre au projet, faute d'équivalent standard
+# dans les vocabulaires OMOP (ADR-0006).
+PREMIER_CONCEPT_LOCAL = 2_000_000_000
+
 
 @dataclass(frozen=True)
 class Vocabulaire:
@@ -98,6 +104,7 @@ class Vocabulaire:
 
     anti_ssa: JeuDeConcepts
     biologie: Table
+    items: Table
     diagnostics: Table
     medicaments: Table
     notes: Table
@@ -122,6 +129,7 @@ class Vocabulaire:
         return cls(
             anti_ssa=JeuDeConcepts.par_defaut(),
             biologie=Table.charger("biologie.json"),
+            items=Table.charger("items.json"),
             diagnostics=Table.charger("diagnostics.json"),
             medicaments=Table.charger("medicaments.json"),
             notes=Table.charger("notes.json"),

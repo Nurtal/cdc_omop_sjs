@@ -132,7 +132,7 @@ def test_un_compte_rendu_ne_dit_jamais_autre_chose_que_letat_reel(tmp_path: Path
             pass
         if re.search(r"[Ff]ocus score à 0\.", texte) or "Focus score à 0." in texte:
             assert reel["focus_score"] == 0.0, texte
-        chiffre = re.search(r"focus score (?:à|:|évalué à) (\d+(?:,\d+)?)", texte, re.I)
+        chiffre = re.search(r"focus score (?:à|:|évalué à) (\d+(?:,\d+)?)", texte, re.IGNORECASE)
         if chiffre:
             attendu = float(chiffre.group(1).replace(",", "."))
             assert reel["focus_score"] == attendu, texte
