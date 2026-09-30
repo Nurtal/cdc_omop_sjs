@@ -140,10 +140,10 @@ def test_les_items_sans_concept_standard_sont_nommes() -> None:
     items = Vocabulaire.par_defaut().items
     sans_standard = items.groupe("sans_concept_standard")
 
-    assert set(sans_standard) == {"focus_score", "oss"}
+    assert set(sans_standard) == {"focus_score", "oss", "debit_salivaire"}
     assert all(items.concept(code) >= PREMIER_CONCEPT_LOCAL for code in sans_standard)
     assert items.concept("schirmer_droit") < PREMIER_CONCEPT_LOCAL
-    assert items.concept("debit_salivaire") < PREMIER_CONCEPT_LOCAL
+    assert items.concept("schirmer_gauche") < PREMIER_CONCEPT_LOCAL
 
 
 def test_le_manifeste_enregistre_lencodage_reellement_utilise(tmp_path: Path) -> None:

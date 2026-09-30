@@ -51,7 +51,21 @@ SCHEMAS: Mapping[str, Mapping[str, str]] = {
         "value_as_concept_id": "BIGINT",
         "range_high": "DOUBLE",
         "measurement_source_value": "VARCHAR",
+        "measurement_type_concept_id": "BIGINT",
+        "measurement_event_id": "BIGINT",
+        "meas_event_field_concept_id": "BIGINT",
         "visit_occurrence_id": "BIGINT",
+    },
+    "note_nlp": {
+        "note_nlp_id": "BIGINT",
+        "note_id": "BIGINT",
+        "section_concept_id": "BIGINT",
+        "snippet": "VARCHAR",
+        "offset": "VARCHAR",
+        "lexical_variant": "VARCHAR",
+        "note_nlp_concept_id": "BIGINT",
+        "nlp_system": "VARCHAR",
+        "term_exists": "VARCHAR",
     },
     "visit_occurrence": {
         "visit_occurrence_id": "BIGINT",
@@ -128,6 +142,11 @@ SCHEMAS: Mapping[str, Mapping[str, str]] = {
         "date_defini": "DATE",
         "exclu": "BOOLEAN",
         "criteres_exclusion": "VARCHAR",
+        "origine_focus_score": "VARCHAR",
+        "origine_anti_ssa": "VARCHAR",
+        "origine_oss": "VARCHAR",
+        "origine_schirmer": "VARCHAR",
+        "origine_debit_salivaire": "VARCHAR",
     },
 }
 

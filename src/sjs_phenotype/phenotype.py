@@ -18,6 +18,7 @@ from typing import Any
 
 from sjs_phenotype import omop
 from sjs_phenotype.concepts import Vocabulaire
+from sjs_phenotype.extraction import Origine
 from sjs_phenotype.modele import Item, LignePhenotype, Niveau, Statut, niveau_pour
 
 CODE_VHC = "B18.2"
@@ -48,6 +49,29 @@ GROUP BY p.person_id
 ORDER BY p.person_id
 """
 
+
+_REQUETE_ITEMS = """
+WITH resultats AS (
+    SELECT
+        person_id,
+        {jour} AS jour,
+        {nombre} {sens} $seuil AS positif,
+        measurement_type_concept_id = $type_nlp AS du_texte
+    FROM read_parquet($measurement)
+    WHERE list_contains($concepts, measurement_concept_id) AND {nombre} IS NOT NULL
+)
+SELECT
+    person_id,
+    count(*) AS nb_resultats,
+    count(*) FILTER (WHERE positif) AS nb_positifs,
+    min(jour) FILTER (WHERE positif) AS premiere_preuve,
+    -- L'origine doit suivre la preuve qui décide du Statut, pas n'importe quelle ligne :
+    -- sinon le retrait de source attribuerait au texte un Item tranché par le structuré.
+    count(*) FILTER (WHERE positif AND du_texte) AS nb_positifs_texte,
+    count(*) FILTER (WHERE du_texte) AS nb_texte
+FROM resultats
+GROUP BY person_id
+"""
 
 _REQUETE_EXCLUSIONS = """
 SELECT DISTINCT c.person_id, c.condition_concept_id
@@ -92,6 +116,7 @@ def run_phenotype(dossier_omop: Path, parametres: Parametres | None = None) -> l
             },
         ).fetchall()
         exclusions = _exclusions(con, dossier_omop, vocabulaire, absences)
+        items = _items_mesures(con, dossier_omop, vocabulaire, absences)
     return [
         _ligne(
             int(person_id),
@@ -99,9 +124,69 @@ def run_phenotype(dossier_omop: Path, parametres: Parametres | None = None) -> l
             nb_positifs,
             premiere_preuve,
             exclusions.get(int(person_id), ()),
+            items.get(int(person_id), {}),
         )
         for person_id, nb_resultats, nb_positifs, premiere_preuve in lignes
     ]
+
+
+# Chaque Item numérique, ses concepts et le sens de son seuil : « ≥ » pour le focus score
+# et l'OSS, « ≤ » pour le Schirmer et le débit salivaire. Le Schirmer en a plusieurs — un
+# site qui code par œil doit être reconnu comme un site qui ne latéralise pas.
+_SEUILS: Mapping[Item, tuple[str, float, bool]] = {
+    Item.FOCUS_SCORE: ("focus_score", 1.0, True),
+    Item.OSS: ("oss", 5.0, True),
+    Item.SCHIRMER: ("schirmer", 5.0, False),
+    Item.DEBIT_SALIVAIRE: ("debit_salivaire", 0.1, False),
+}
+
+
+def _concepts_item(vocabulaire: Vocabulaire, code: str) -> list[int]:
+    """Tous les concepts d'un Item : le groupe s'il existe, le code seul sinon."""
+    try:
+        membres = vocabulaire.items.groupe(code)
+    except KeyError:
+        membres = (code,)
+    return [vocabulaire.items.concept(membre) for membre in membres]
+
+
+def _items_mesures(
+    con: Any, dossier_omop: Path, vocabulaire: Vocabulaire, absences: omop.Absences
+) -> dict[int, dict[Item, tuple[Statut, date | None, bool]]]:
+    """Les Items numériques, quelle que soit l'origine de la mesure.
+
+    La Définition computable lit MEASUREMENT sans se soucier de savoir si la valeur a été
+    saisie au dossier ou extraite d'un compte rendu ; elle retient seulement d'où elle
+    vient, pour préparer le retrait de source.
+    """
+    chemin = dossier_omop / "measurement.parquet"
+    if not chemin.exists():
+        return {}
+
+    type_nlp = vocabulaire.items.concept("type_nlp")
+    resultats: dict[int, dict[Item, tuple[Statut, date | None, bool]]] = {}
+    for item, (code, seuil, au_dessus) in _SEUILS.items():
+        requete = _REQUETE_ITEMS.format(
+            nombre=_lue("value_as_number", "DOUBLE", absences),
+            jour=_lue("measurement_date", "DATE", absences),
+            sens=">=" if au_dessus else "<=",
+        )
+        lignes = con.execute(
+            requete,
+            {
+                "measurement": str(chemin),
+                "concepts": _concepts_item(vocabulaire, code),
+                "seuil": seuil,
+                "type_nlp": type_nlp,
+            },
+        ).fetchall()
+        for person_id, nb_resultats, nb_positifs, preuve, nb_pos_texte, nb_texte in lignes:
+            statut = _statut(nb_resultats, nb_positifs)
+            # Un Item positif doit son origine à la preuve positive ; un Item négatif, à
+            # l'ensemble des résultats qui l'ont rendu négatif.
+            du_texte = bool(nb_pos_texte) if nb_positifs else bool(nb_texte)
+            resultats.setdefault(int(person_id), {})[item] = (statut, preuve, du_texte)
+    return resultats
 
 
 def _exclusions(
@@ -183,15 +268,28 @@ def _ligne(
     nb_positifs: int,
     premiere_preuve: date | None,
     criteres: tuple[str, ...] = (),
+    items: Mapping[Item, tuple[Statut, date | None, bool]] | None = None,
 ) -> LignePhenotype:
+    items = items or {}
     statuts = {item: Statut.NON_DOCUMENTE for item in Item}
     statuts[Item.ANTI_SSA] = _statut(nb_resultats, nb_positifs)
+    origines = {item: Origine.AUCUNE for item in Item}
+    if statuts[Item.ANTI_SSA] is not Statut.NON_DOCUMENTE:
+        origines[Item.ANTI_SSA] = Origine.STRUCTUREE
+
+    preuves_items: list[tuple[date, int]] = []
+    for item, (statut, preuve, du_texte) in items.items():
+        statuts[item] = statut
+        origines[item] = Origine.TEXTE if du_texte else Origine.STRUCTUREE
+        if statut is Statut.POSITIF and preuve is not None:
+            preuves_items.append((preuve, item.points))
 
     score_observe = sum(item.points for item, s in statuts.items() if s is Statut.POSITIF)
     score_atteignable = score_observe + sum(
         item.points for item, s in statuts.items() if s is Statut.NON_DOCUMENTE
     )
     preuves = [(premiere_preuve, Item.ANTI_SSA.points)] if premiere_preuve else []
+    preuves += preuves_items
     return LignePhenotype(
         person_id=int(person_id),
         statuts=statuts,
@@ -200,6 +298,7 @@ def _ligne(
         niveau=niveau_pour(score_observe, score_atteignable),
         dates_atteinte=_dates_atteinte(preuves, score_atteignable),
         criteres_exclusion=criteres,
+        origines=origines,
     )
 
 
@@ -244,6 +343,10 @@ def ecrire(table: Sequence[LignePhenotype], dossier: Path) -> Path:
             "date_defini": ligne.dates_atteinte.get(Niveau.DEFINI),
             "exclu": ligne.exclu,
             "criteres_exclusion": ", ".join(ligne.criteres_exclusion),
+            **{
+                f"origine_{item.value}": str(ligne.origines.get(item, Origine.AUCUNE))
+                for item in Item
+            },
         }
         for ligne in table
     ]
@@ -275,6 +378,10 @@ def lire(chemin: Path) -> list[LignePhenotype]:
                     for critere in (brute.get("criteres_exclusion") or "").split(", ")
                     if critere
                 ),
+                origines={
+                    item: Origine(brute.get(f"origine_{item.value}") or Origine.AUCUNE)
+                    for item in Item
+                },
             )
         )
     return table

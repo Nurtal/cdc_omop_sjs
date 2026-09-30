@@ -34,6 +34,9 @@ def _anti_ssa_positif(person_id: int) -> dict[str, Any]:
         "value_as_concept_id": VOCABULAIRE.valeur_positive,
         "range_high": None,
         "measurement_source_value": "anti-SSA",
+        "measurement_type_concept_id": VOCABULAIRE.items.concept("type_ehr"),
+        "measurement_event_id": None,
+        "meas_event_field_concept_id": None,
         "visit_occurrence_id": None,
     }
 

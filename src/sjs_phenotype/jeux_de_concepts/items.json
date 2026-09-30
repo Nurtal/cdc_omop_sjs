@@ -1,11 +1,11 @@
 {
   "nom": "items",
-  "commentaire": "Concepts des Items ACR/EULAR issus du texte. Deux d'entre eux — focus score et Ocular Staining Score — n'ont aucun équivalent standard, ni LOINC ni SNOMED : ils gardent des identifiants locaux. Voir docs/vocabulaire-athena.md.",
+  "commentaire": "Concepts des Items ACR/EULAR. Trois d'entre eux — focus score, Ocular Staining Score et débit salivaire non stimulé — n'ont aucun équivalent standard exact : ils gardent des identifiants locaux et vivent dans MEASUREMENT comme les autres (ADR-0006, ADR-0007). Voir docs/vocabulaire-athena.md.",
   "instantane_vocabulaire": {
     "source": "LOINC 2.82 via tx.fhir.org ; SNOMED CT international ; concept_id OMOP via ATLAS demo (WebAPI 2.14.0, vocabulaire ~2024-09)",
     "date": "2026-09-21",
     "a_verifier": false,
-    "note": "Le débit salivaire relève du domaine Observation en OMOP, non Measurement : décision de modélisation à prendre en #10."
+    "note": "Le type de résultat « NLP » (32858) est le concept standard du domaine Type Concept ; les variantes « NLP derived » sont non-standard."
   },
   "codes": {
     "focus_score": {
@@ -29,8 +29,23 @@
       "libelle": "SNOMED 397547000 — Schirmer I test (non latéralisé)"
     },
     "debit_salivaire": {
-      "concept_id": 4088662,
-      "libelle": "SNOMED 251339001 — Whole saliva flow rate (domaine Observation)"
+      "concept_id": 2000005002,
+      "libelle": "Débit salivaire non stimulé (mL/min)",
+      "concept_standard_proche": 4088662,
+      "note_standard": "SNOMED 251339001 « Whole saliva flow rate », domaine Observation, sans qualificatif « non stimulé »."
+    },
+    "type_nlp": {
+      "concept_id": 32858,
+      "libelle": "NLP — type de résultat dérivé d'une extraction de texte (standard)"
+    },
+    "type_ehr": {
+      "concept_id": 32817,
+      "libelle": "EHR — type de résultat saisi dans le dossier (standard)"
+    },
+    "champ_note_id": {
+      "concept_id": 1147156,
+      "libelle": "CDM note.note_id — champ désigné par meas_event_field_concept_id",
+      "note_standard": "Deux concepts CDM Field portent ce nom (1147156/CDM212 et 1147739/CDM786) ; celui-ci est retenu, à reconfirmer sur l'instantané déployé à l'EDS."
     }
   },
   "groupes": {
@@ -41,9 +56,7 @@
     ],
     "sans_concept_standard": [
       "focus_score",
-      "oss"
-    ],
-    "sans_qualificatif_exact": [
+      "oss",
       "debit_salivaire"
     ]
   }

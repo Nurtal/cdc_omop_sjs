@@ -483,6 +483,9 @@ def _dosages(
             ),
             "range_high": None,
             "measurement_source_value": "anti-SSA",
+            "measurement_type_concept_id": vocabulaire.items.concept("type_ehr"),
+            "measurement_event_id": None,
+            "meas_event_field_concept_id": None,
             "visit_occurrence_id": venue["visit_occurrence_id"],
         }
         for concept, positif in rendus
@@ -515,6 +518,9 @@ def _biologie(
             ),
             "range_high": None,
             "measurement_source_value": "PCR VHC",
+            "measurement_type_concept_id": vocabulaire.items.concept("type_ehr"),
+            "measurement_event_id": None,
+            "meas_event_field_concept_id": None,
             "visit_occurrence_id": venue["visit_occurrence_id"],
         }
     ]

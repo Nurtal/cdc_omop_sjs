@@ -8,12 +8,13 @@ from typing import Any
 
 from aide_omop import ecrire_jeu
 from sjs_phenotype import omop
-from sjs_phenotype.concepts import JeuDeConcepts
+from sjs_phenotype.concepts import JeuDeConcepts, Vocabulaire
 from sjs_phenotype.generator import Observation, Profil, Scenario, generer
 from sjs_phenotype.modele import Item, Niveau, Statut
 from sjs_phenotype.phenotype import run_phenotype
 
 CONCEPTS = JeuDeConcepts.par_defaut()
+CONCEPTS_ITEMS = Vocabulaire.par_defaut().items
 
 
 def _personne(person_id: int) -> dict[str, Any]:
@@ -38,6 +39,9 @@ def _resultat(
         "value_as_concept_id": valeur_concept_id,
         "range_high": seuil_haut,
         "measurement_source_value": "SSA",
+        "measurement_type_concept_id": CONCEPTS_ITEMS.concept("type_ehr"),
+        "measurement_event_id": None,
+        "meas_event_field_concept_id": None,
         "visit_occurrence_id": None,
     }
 

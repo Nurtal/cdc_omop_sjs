@@ -24,7 +24,7 @@ indépendantes, pas à une déduction.
 |---|---|---|
 | Focus score | Aucun concept standard | local |
 | Ocular Staining Score | Aucun concept standard | local |
-| Débit salivaire non stimulé | Partiel — pas de « non stimulé » | SNOMED 251339001 (4088662) |
+| Débit salivaire non stimulé | Partiel — pas de « non stimulé » | local (ADR-0007) |
 | Schirmer | Disponible | LOINC 29003-1 / 29004-9 |
 | Anti-SSA, Ro52, Ro60, SSB | Couverture complète | LOINC |
 
@@ -54,9 +54,13 @@ SNOMED `251339001` « Whole saliva flow rate » (OMOP **4088662**, standard) exi
    que whole, parotid et submandibular. Le qualificatif `255371003` « Unstimulated » existe
    isolément, mais aucun concept pré-coordonné ne les combine. Or le critère ACR/EULAR vise
    spécifiquement le débit **non stimulé** (≤ 0,1 mL/min).
-2. **Domaine OMOP = Observation**, pas Measurement. Une décision de modélisation reste donc
-   à prendre au moment de l'extraction (#10) : suivre le domaine OMOP et écrire dans
-   OBSERVATION, ou garder tous les Items dans MEASUREMENT au prix d'un écart au standard.
+2. **Domaine OMOP = Observation**, pas Measurement.
+
+**Décision prise (ADR-0007)** : le projet déclare un concept local « débit salivaire non
+stimulé » et garde les cinq Items dans MEASUREMENT. Utiliser 4088662 aurait donné une
+fidélité apparente au standard pour un sens faux, puisque le concept ne dit pas « non
+stimulé ». Le concept standard le plus proche est enregistré dans `items.json` sous
+`concept_standard_proche`, pour qu'un site receveur puisse faire le lien.
 
 ## Schirmer : les codes initialement retenus étaient les mauvais
 

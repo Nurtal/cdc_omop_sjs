@@ -16,13 +16,14 @@ import pytest
 
 from aide_omop import ecrire_jeu
 from sjs_phenotype import omop
-from sjs_phenotype.concepts import JeuDeConcepts
+from sjs_phenotype.concepts import JeuDeConcepts, Vocabulaire
 from sjs_phenotype.generator import Scenario, generer
 from sjs_phenotype.modele import Item, Niveau, Statut
 from sjs_phenotype.omop import Absences
 from sjs_phenotype.phenotype import Parametres, run_phenotype
 
 CONCEPTS = JeuDeConcepts.par_defaut()
+CONCEPTS_ITEMS = Vocabulaire.par_defaut().items
 
 
 def _personne(person_id: int) -> dict[str, Any]:
@@ -40,6 +41,9 @@ def _resultat_vide(person_id: int) -> dict[str, Any]:
         "value_as_concept_id": None,
         "range_high": None,
         "measurement_source_value": "anti-SSA",
+        "measurement_type_concept_id": CONCEPTS_ITEMS.concept("type_ehr"),
+        "measurement_event_id": None,
+        "meas_event_field_concept_id": None,
         "visit_occurrence_id": None,
     }
 
