@@ -6,7 +6,7 @@ Item ACR/EULAR, Statut d'item, Score observé, Score atteignable, Niveau de cert
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
 
@@ -65,6 +65,13 @@ class LignePhenotype:
     score_atteignable: int
     niveau: Niveau
     dates_atteinte: Mapping[Niveau, date]
+    criteres_exclusion: tuple[str, ...] = ()
+    origines: Mapping[Item, str] = field(default_factory=dict)
+
+    @property
+    def exclu(self) -> bool:
+        """Un patient exclu garde son Niveau : il est signalé, pas retiré."""
+        return bool(self.criteres_exclusion)
 
     def __eq__(self, autre: object) -> bool:
         if not isinstance(autre, LignePhenotype):
@@ -76,6 +83,8 @@ class LignePhenotype:
             and self.score_atteignable == autre.score_atteignable
             and self.niveau == autre.niveau
             and dict(self.dates_atteinte) == dict(autre.dates_atteinte)
+            and self.criteres_exclusion == autre.criteres_exclusion
+            and dict(self.origines) == dict(autre.origines)
         )
 
     def __hash__(self) -> int:

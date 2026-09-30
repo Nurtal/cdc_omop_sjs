@@ -4,4 +4,4 @@ Le format standard OHDSI serait une définition de cohorte ATLAS (Circe JSON). M
 
 ## Consequences
 
-Un autre site OMOP ne peut pas importer le phénotype dans ATLAS tel quel : il doit exécuter le package, et adapter le SQL s'il n'a ni Parquet ni DuckDB. La compatibilité OMOP est garantie par construction (concepts standard uniquement, codes locaux reliés à LOINC dans l'EDS), pas par un test multi-site.
+Un autre site OMOP ne peut pas importer le phénotype dans ATLAS tel quel : il doit exécuter le package, et adapter le SQL s'il n'a ni Parquet ni DuckDB. La compatibilité OMOP est garantie par construction (concepts standard autant que possible, codes locaux reliés à LOINC dans l'EDS), pas par un test multi-site. Deux Items n'ont aucun concept standard et gardent des identifiants locaux : voir ADR-0006.
